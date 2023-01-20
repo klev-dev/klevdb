@@ -9,9 +9,16 @@ import (
 	"github.com/klev-dev/klevdb/segment"
 )
 
-const OffsetOldest = message.OffsetOldest
-const OffsetNewest = message.OffsetNewest
-const OffsetInvalid = message.OffsetInvalid
+const (
+	// OffsetOldest represents the smallest offset still available
+	// Use it to consume all messages, starting at the first available
+	OffsetOldest = message.OffsetOldest
+	// OffsetNewest represents the offset that will be used for the next produce
+	// Use it to consume only new messages
+	OffsetNewest = message.OffsetNewest
+	// OffsetInvalid is the offset returned when error is detected
+	OffsetInvalid = message.OffsetInvalid
+)
 
 type Message = message.Message
 
@@ -24,13 +31,20 @@ var ErrReadonly = errors.New("log opened in readonly mode")
 type Stats = segment.Stats
 
 type Options struct {
+	// When set will try to create all directories
 	CreateDirs bool
-	Readonly   bool
-	KeyIndex   bool
-	TimeIndex  bool
-	AutoSync   bool
-	Rollover   int64
-	Check      bool
+	// Open the store in readonly mode
+	Readonly bool
+	// Index message keys, enabling GetByKey and OffsetByKey
+	KeyIndex bool
+	// Index message times, enabling GetByTime and OffsetByTime
+	TimeIndex bool
+	// Force filesystem sync after each Publish
+	AutoSync bool
+	// At what segment size it will rollover to a new segment. Defaults to 1mb.
+	Rollover int64
+	// Check the head segment for integrity, before opening it for reading/writing.
+	Check bool
 }
 
 type Log interface {
@@ -106,6 +120,7 @@ type Log interface {
 	Close() error
 }
 
+// Stat stats a store directory, without opening the store
 func Stat(dir string, opts Options) (Stats, error) {
 	return segment.StatDir(dir, index.Params{
 		Times: opts.TimeIndex,
@@ -113,10 +128,12 @@ func Stat(dir string, opts Options) (Stats, error) {
 	})
 }
 
+// Backup will backup a store directory to another location, without opening the store
 func Backup(src, dst string) error {
 	return segment.BackupDir(src, dst)
 }
 
+// Check will run an integrity check, without opening the store
 func Check(dir string, opts Options) error {
 	return segment.CheckDir(dir, index.Params{
 		Times: opts.TimeIndex,
@@ -124,6 +141,7 @@ func Check(dir string, opts Options) error {
 	})
 }
 
+// Recover rewrites the storage to include all messages prior the first that fails an integrity check
 func Recover(dir string, opts Options) error {
 	return segment.RecoverDir(dir, index.Params{
 		Times: opts.TimeIndex,
