@@ -3,8 +3,6 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gofrs/flock v0.8.1 h1:+gYjHKf32LDeiEEFhQaotPbLuUXjY5ZqxKgXy7n59aw=
 github.com/gofrs/flock v0.8.1/go.mod h1:F1TvTiK9OcQqauNUHlbJvyl9Qa1QvF/gOUDKA14jxHU=
-github.com/klev-dev/kleverr v0.0.0-20230118134733-0dbf297e4a61 h1:8fazLA3NPZFUqrVqPyIU0nNu4w5Ll9V+Kr9xlphCyI8=
-github.com/klev-dev/kleverr v0.0.0-20230118134733-0dbf297e4a61/go.mod h1:DV1tEcfsgAzKraeb/7nux27wOJs8w9P8fLB6GT7DmGM=
 github.com/klev-dev/kleverr v0.0.0-20230118141223-3734486809ff h1:iPrvmAIOmpcoMCmRdser9aVccHL9mV1zD1L65fHu2D0=
 github.com/klev-dev/kleverr v0.0.0-20230118141223-3734486809ff/go.mod h1:DV1tEcfsgAzKraeb/7nux27wOJs8w9P8fLB6GT7DmGM=
 github.com/mr-tron/base58 v1.2.0 h1:T/HDJBh4ZCPbU39/+c3rRvE0uKBQlU27+QI8LJ4t64o=
