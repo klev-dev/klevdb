@@ -987,6 +987,7 @@ func TestReindex(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Run("ReaderPartial", testDeleteReaderPartial)
+	t.Run("ReaderPartialReload", testDeleteReaderPartialReload)
 	t.Run("ReaderFull", testDeleteReaderFull)
 	t.Run("WriterSingle", testDeleteWriterSingle)
 	t.Run("WriterLast", testDeleteWriterLast)
@@ -1007,6 +1008,59 @@ func testDeleteReaderPartial(t *testing.T) {
 	defer l.Close()
 
 	publishBatched(t, l, msgs, 1)
+
+	stats, err := l.Stat()
+	require.NoError(t, err)
+	require.Equal(t, 4, stats.Messages)
+	require.Equal(t, 2, stats.Segments)
+
+	offsets, sz, err := l.Delete(map[int64]struct{}{
+		0: struct{}{},
+	})
+	require.NoError(t, err)
+	require.Len(t, offsets, 1)
+	require.Contains(t, offsets, int64(0))
+	require.Equal(t, l.Size(msgs[0]), sz)
+
+	stats, err = l.Stat()
+	require.NoError(t, err)
+	require.Equal(t, 3, stats.Messages)
+	require.Equal(t, 2, stats.Segments)
+
+	doff, dmsgs, err := l.Consume(message.OffsetOldest, 32)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), doff)
+	require.Equal(t, msgs[1], dmsgs[0])
+
+	_, err = l.Get(0)
+	require.ErrorIs(t, err, ErrInvalidOffset)
+
+	_, err = l.GetByKey(msgs[0].Key)
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
+func testDeleteReaderPartialReload(t *testing.T) {
+	dir := t.TempDir()
+	msgs := message.Gen(4)
+
+	l, err := Open(dir, Options{
+		TimeIndex: true,
+		KeyIndex:  true,
+		Rollover:  2 * (message.Size(msgs[0]) - 1),
+	})
+	require.NoError(t, err)
+	publishBatched(t, l, msgs, 1)
+
+	err = l.Close()
+	require.NoError(t, err)
+
+	l, err = Open(dir, Options{
+		TimeIndex: true,
+		KeyIndex:  true,
+		Rollover:  2 * (message.Size(msgs[0]) - 1),
+	})
+	require.NoError(t, err)
+	defer l.Close()
 
 	stats, err := l.Stat()
 	require.NoError(t, err)
