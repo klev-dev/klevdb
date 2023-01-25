@@ -1,6 +1,7 @@
 package klevdb
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -11,29 +12,21 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
-func BenchmarkSinlge(b *testing.B) {
-	b.Run("PublishBase", benchmarkPublishBase)
-	b.Run("PublishIndex", benchmarkPublishIndex)
-	b.Run("PublishBatch", benchmarkPublishBatch)
-	b.Run("ConsumeBase", benchmarkConsumeBase)
-	b.Run("ConsumeReopen", benchmarkConsumeReopen)
-	b.Run("ConsumeRO", benchmarkConsumeRO)
-	b.Run("GetBase", benchmarkGetBase)
-	b.Run("GetKeyBase", benchmarkGetKeyBase)
-	b.Run("ConcurrentBase", benchmarkConcurrentBase)
+func BenchmarkSingle(b *testing.B) {
+	b.Run("Publish", benchmarkPublish)
+	b.Run("Consume", benchmarkConsume)
+	b.Run("Get", benchmarkGet)
 }
 
 func BenchmarkMulti(b *testing.B) {
+	b.Run("Base", benchmarkBaseMulti)
 	b.Run("Publish", benchmarkPublishMulti)
 	b.Run("Consume", benchmarkConsumeMulti)
 	b.Run("GetKey", benchmarkGetKeyMulti)
 }
 
 func MkdirBench(b *testing.B) string {
-	parent, name, found := strings.Cut(b.Name(), "/")
-	if !found {
-		name = parent
-	}
+	name := strings.Replace(b.Name(), "/", "_", -1)
 
 	currentDir, err := os.Getwd()
 	require.NoError(b, err)
@@ -43,74 +36,48 @@ func MkdirBench(b *testing.B) string {
 	return dir
 }
 
-func benchmarkPublishBase(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
+func benchmarkPublish(b *testing.B) {
+	var cases = []struct {
+		name string
+		opts Options
+	}{
+		{"No", Options{}},
+		{"Times", Options{TimeIndex: true}},
+		{"Keys", Options{KeyIndex: true}},
+		{"All", Options{TimeIndex: true, KeyIndex: true}},
+	}
+	for _, bn := range []int{1, 8} {
+		for _, c := range cases {
+			opts := c.opts
+			bn := bn
+			b.Run(fmt.Sprintf("%d/%s", bn, c.name), func(b *testing.B) {
+				dir := MkdirBench(b)
+				defer os.RemoveAll(dir)
 
-	s, err := Open(dir, Options{})
-	require.NoError(b, err)
-	defer s.Close()
+				s, err := Open(dir, opts)
+				require.NoError(b, err)
+				defer s.Close()
 
-	msgs := message.Gen(b.N)
+				msgs := message.Gen(b.N)
 
-	b.SetBytes(s.Size(msgs[0]))
-	b.ResetTimer()
+				b.SetBytes(s.Size(msgs[0]) * int64(bn))
+				b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		if _, err := s.Publish(msgs[i : i+1]); err != nil {
-			b.Fatal(err)
+				for i := 0; i < b.N; i += bn {
+					top := i + bn
+					if top > b.N {
+						top = b.N
+					}
+
+					if _, err := s.Publish(msgs[i:top]); err != nil {
+						b.Fatal(err)
+					}
+				}
+
+				b.StopTimer()
+			})
 		}
 	}
-
-	b.StopTimer()
-}
-
-func benchmarkPublishIndex(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
-
-	s, err := Open(dir, Options{TimeIndex: true, KeyIndex: true})
-	require.NoError(b, err)
-	defer s.Close()
-
-	msgs := message.Gen(b.N)
-
-	b.SetBytes(s.Size(msgs[0]))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		if _, err := s.Publish(msgs[i : i+1]); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.StopTimer()
-}
-
-func benchmarkPublishBatch(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
-
-	s, err := Open(dir, Options{TimeIndex: true, KeyIndex: true})
-	require.NoError(b, err)
-	defer s.Close()
-
-	msgs := message.Gen(b.N)
-
-	b.SetBytes(s.Size(msgs[0]) * 4)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i += 4 {
-		top := i + 4
-		if top > b.N {
-			top = b.N
-		}
-		if _, err := s.Publish(msgs[i:top]); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.StopTimer()
 }
 
 func benchmarkPublishMulti(b *testing.B) {
@@ -147,95 +114,100 @@ func benchmarkPublishMulti(b *testing.B) {
 	b.StopTimer()
 }
 
-func benchmarkConsumeBase(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
-
-	s, err := Open(dir, Options{})
-	require.NoError(b, err)
-	defer s.Close()
-
+func fillLog(b *testing.B, l Log) []Message {
 	msgs := message.Gen(b.N)
-	for i := range msgs {
-		if _, err := s.Publish(msgs[i : i+1]); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.SetBytes(s.Size(msgs[0]) * 4)
-	b.ResetTimer()
-
 	for i := 0; i < b.N; i += 4 {
-		if _, _, err := s.Consume(int64(i), 4); err != nil {
+		top := i + 4
+		if top > b.N {
+			top = b.N
+		}
+		if _, err := l.Publish(msgs[i:top]); err != nil {
 			b.Fatal(err)
 		}
 	}
-
-	b.StopTimer()
+	return msgs
 }
 
-func benchmarkConsumeReopen(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
+func benchmarkConsume(b *testing.B) {
+	for _, bn := range []int{1, 8} {
+		bn := bn
 
-	s, err := Open(dir, Options{})
-	require.NoError(b, err)
-	defer s.Close()
+		b.Run(fmt.Sprintf("W/%d", bn), func(b *testing.B) {
+			dir := MkdirBench(b)
+			defer os.RemoveAll(dir)
 
-	msgs := message.Gen(b.N)
-	for i := range msgs {
-		if _, err := s.Publish(msgs[i : i+1]); err != nil {
-			b.Fatal(err)
-		}
+			l, err := Open(dir, Options{})
+			require.NoError(b, err)
+			defer l.Close()
+
+			msgs := fillLog(b, l)
+
+			b.SetBytes(l.Size(msgs[0]) * int64(bn))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i += bn {
+				if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.StopTimer()
+		})
+
+		b.Run(fmt.Sprintf("RW/%d", bn), func(b *testing.B) {
+			dir := MkdirBench(b)
+			defer os.RemoveAll(dir)
+
+			l, err := Open(dir, Options{})
+			require.NoError(b, err)
+			defer l.Close()
+
+			msgs := fillLog(b, l)
+			require.NoError(b, l.Close())
+
+			b.SetBytes(l.Size(msgs[0]) * int64(bn))
+			b.ResetTimer()
+
+			l, err = Open(dir, Options{})
+			require.NoError(b, err)
+			defer l.Close()
+
+			for i := 0; i < b.N; i += bn {
+				if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.StopTimer()
+		})
+
+		b.Run(fmt.Sprintf("R/%d", bn), func(b *testing.B) {
+			dir := MkdirBench(b)
+			defer os.RemoveAll(dir)
+
+			l, err := Open(dir, Options{})
+			require.NoError(b, err)
+			defer l.Close()
+
+			msgs := fillLog(b, l)
+			require.NoError(b, l.Close())
+
+			b.SetBytes(l.Size(msgs[0]) * int64(bn))
+			b.ResetTimer()
+
+			l, err = Open(dir, Options{Readonly: true})
+			require.NoError(b, err)
+			defer l.Close()
+
+			for i := 0; i < b.N; i += bn {
+				if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.StopTimer()
+		})
 	}
-	require.NoError(b, s.Close())
-
-	b.SetBytes(s.Size(msgs[0]) * 4)
-	b.ResetTimer()
-
-	s, err = Open(dir, Options{})
-	require.NoError(b, err)
-	defer s.Close()
-
-	for i := 0; i < b.N; i += 4 {
-		if _, _, err := s.Consume(int64(i), 4); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.StopTimer()
-}
-
-func benchmarkConsumeRO(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
-
-	s, err := Open(dir, Options{})
-	require.NoError(b, err)
-	defer s.Close()
-
-	msgs := message.Gen(b.N)
-	for i := range msgs {
-		if _, err := s.Publish(msgs[i : i+1]); err != nil {
-			b.Fatal(err)
-		}
-	}
-	require.NoError(b, s.Close())
-
-	b.SetBytes(s.Size(msgs[0]) * 4)
-	b.ResetTimer()
-
-	s, err = Open(dir, Options{Readonly: true})
-	require.NoError(b, err)
-	defer s.Close()
-
-	for i := 0; i < b.N; i += 4 {
-		if _, _, err := s.Consume(int64(i), 4); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.StopTimer()
 }
 
 func benchmarkConsumeMulti(b *testing.B) {
@@ -273,66 +245,72 @@ func benchmarkConsumeMulti(b *testing.B) {
 	b.StopTimer()
 }
 
-func benchmarkGetBase(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
+func benchmarkGet(b *testing.B) {
+	b.Run("ByOffset", func(b *testing.B) {
+		dir := MkdirBench(b)
+		defer os.RemoveAll(dir)
 
-	s, err := Open(dir, Options{})
-	require.NoError(b, err)
-	defer s.Close()
+		l, err := Open(dir, Options{})
+		require.NoError(b, err)
+		defer l.Close()
 
-	msgs := message.Gen(b.N)
-	for i := 0; i < b.N; i += 10 {
-		top := i + 10
-		if top > b.N {
-			top = b.N
+		msgs := fillLog(b, l)
+
+		b.SetBytes(l.Size(msgs[0]))
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := l.Get(int64(i)); err != nil {
+				b.Fatal(err)
+			}
 		}
-		if _, err := s.Publish(msgs[i:top]); err != nil {
-			b.Fatal(err)
+
+		b.StopTimer()
+	})
+
+	b.Run("ByKey", func(b *testing.B) {
+		dir := MkdirBench(b)
+		defer os.RemoveAll(dir)
+
+		l, err := Open(dir, Options{KeyIndex: true})
+		require.NoError(b, err)
+		defer l.Close()
+
+		msgs := fillLog(b, l)
+
+		b.SetBytes(l.Size(msgs[0]))
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := l.GetByKey(msgs[i].Key); err != nil {
+				b.Fatal(err)
+			}
 		}
-	}
 
-	b.SetBytes(s.Size(msgs[0]))
-	b.ResetTimer()
+		b.StopTimer()
+	})
 
-	for i := 0; i < b.N; i++ {
-		if _, err := s.Get(int64(i)); err != nil {
-			b.Fatal(err)
+	b.Run("ByTime", func(b *testing.B) {
+		dir := MkdirBench(b)
+		defer os.RemoveAll(dir)
+
+		l, err := Open(dir, Options{TimeIndex: true})
+		require.NoError(b, err)
+		defer l.Close()
+
+		msgs := fillLog(b, l)
+
+		b.SetBytes(l.Size(msgs[0]))
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := l.GetByTime(msgs[i].Time); err != nil {
+				b.Fatal(err)
+			}
 		}
-	}
 
-	b.StopTimer()
-}
-
-func benchmarkGetKeyBase(b *testing.B) {
-	dir := MkdirBench(b)
-	defer os.RemoveAll(dir)
-
-	s, err := Open(dir, Options{KeyIndex: true})
-	require.NoError(b, err)
-	defer s.Close()
-
-	msgs := message.Gen(b.N)
-	for i := 0; i < b.N; i += 10 {
-		top := i + 10
-		if top > b.N {
-			top = b.N
-		}
-		if _, err := s.Publish(msgs[i:top]); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.SetBytes(s.Size(msgs[0]))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		if _, err := s.GetByKey(msgs[i].Key); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.StopTimer()
+		b.StopTimer()
+	})
 }
 
 func benchmarkGetKeyMulti(b *testing.B) {
@@ -374,7 +352,7 @@ func benchmarkGetKeyMulti(b *testing.B) {
 	b.StopTimer()
 }
 
-func benchmarkConcurrentBase(b *testing.B) {
+func benchmarkBaseMulti(b *testing.B) {
 	dir := MkdirBench(b)
 	defer os.RemoveAll(dir)
 
