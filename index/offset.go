@@ -4,35 +4,20 @@ import (
 	"fmt"
 
 	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/kleverr"
 )
 
 var ErrIndexEmpty = fmt.Errorf("%w: no items", message.ErrInvalidOffset)
 
-func oldest(items []Item) (int64, error) {
-	if len(items) == 0 {
-		return 0, kleverr.Newf("%w: oldest is missing", ErrIndexEmpty)
-	}
-	return items[0].Position, nil
-}
-
-func newest(items []Item) (int64, error) {
-	if len(items) == 0 {
-		return 0, kleverr.Newf("%w: newest is missing", ErrIndexEmpty)
-	}
-	return items[len(items)-1].Position, nil
-}
-
 func Consume(items []Item, offset int64) (int64, error) {
+	if len(items) == 0 {
+		return 0, ErrIndexEmpty
+	}
+
 	switch offset {
 	case message.OffsetOldest:
-		return oldest(items)
+		return items[0].Position, nil
 	case message.OffsetNewest:
-		return newest(items)
-	}
-
-	if len(items) == 0 {
-		return 0, kleverr.Newf("%w: %d is missing", ErrIndexEmpty, offset)
+		return items[len(items)-1].Position, nil
 	}
 
 	beginIndex := 0
@@ -46,7 +31,7 @@ func Consume(items []Item, offset int64) (int64, error) {
 	endItem := items[endIndex]
 	switch {
 	case offset > endItem.Offset:
-		return 0, kleverr.Newf("%w %d: after end", message.ErrInvalidOffset, offset)
+		return 0, message.ErrInvalidOffset
 	case offset == endItem.Offset:
 		return endItem.Position, nil
 	}
@@ -68,22 +53,22 @@ func Consume(items []Item, offset int64) (int64, error) {
 }
 
 func Get(items []Item, offset int64) (int64, error) {
-	switch offset {
-	case message.OffsetOldest:
-		return oldest(items)
-	case message.OffsetNewest:
-		return newest(items)
+	if len(items) == 0 {
+		return 0, ErrIndexEmpty
 	}
 
-	if len(items) == 0 {
-		return 0, kleverr.Newf("%w: %d is missing", ErrIndexEmpty, offset)
+	switch offset {
+	case message.OffsetOldest:
+		return items[0].Position, nil
+	case message.OffsetNewest:
+		return items[len(items)-1].Position, nil
 	}
 
 	beginIndex := 0
 	beginItem := items[beginIndex]
 	switch {
 	case offset < beginItem.Offset:
-		return 0, kleverr.Newf("%w: offset %d is before begin", message.ErrNotFound, offset)
+		return 0, message.ErrNotFound
 	case offset == beginItem.Offset:
 		return beginItem.Position, nil
 	}
@@ -92,7 +77,7 @@ func Get(items []Item, offset int64) (int64, error) {
 	endItem := items[endIndex]
 	switch {
 	case offset > endItem.Offset:
-		return 0, kleverr.Newf("%w: offset %d is after end", message.ErrNotFound, offset)
+		return 0, message.ErrNotFound
 	case offset == endItem.Offset:
 		return endItem.Position, nil
 	}
@@ -110,5 +95,5 @@ func Get(items []Item, offset int64) (int64, error) {
 		}
 	}
 
-	return 0, kleverr.Newf("%w: offset %d not found", message.ErrNotFound, offset)
+	return 0, message.ErrNotFound
 }

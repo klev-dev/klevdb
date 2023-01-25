@@ -2,19 +2,18 @@ package index
 
 import (
 	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/kleverr"
 )
 
 func Time(items []Item, ts int64) (int64, error) {
 	if len(items) == 0 {
-		return 0, kleverr.Newf("%w: %d not found", ErrIndexEmpty, ts)
+		return 0, ErrIndexEmpty
 	}
 
 	beginIndex := 0
 	beginItem := items[beginIndex]
 	switch {
 	case ts < beginItem.Timestamp:
-		return 0, kleverr.Newf("%w: ts before start", message.ErrNotFound)
+		return 0, message.ErrNotFound
 	case ts == beginItem.Timestamp:
 		return beginItem.Position, nil
 	}
@@ -23,7 +22,7 @@ func Time(items []Item, ts int64) (int64, error) {
 	endItem := items[endIndex]
 	switch {
 	case endItem.Timestamp < ts:
-		return 0, kleverr.Newf("%w: ts after end", message.ErrInvalidOffset)
+		return 0, message.ErrInvalidOffset
 	case endItem.Timestamp == ts:
 		return endItem.Position, nil
 	}
