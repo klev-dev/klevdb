@@ -4,7 +4,7 @@ default: test
 test:
 	go test -cover -v ./...
 
-.PHONY: bench bench-publish bench-consume bench-get
+.PHONY: bench bench-publish bench-consume bench-get bench-multi
 bench:
 	go test -bench=. -benchmem
 
@@ -16,6 +16,9 @@ bench-consume:
 
 bench-get:
 	go test -bench=BenchmarkSingle/Get -benchmem
+
+bench-multi:
+	go test -bench=BenchmarkMulti -benchmem
 
 .PHONY: update-libs
 update-libs:
