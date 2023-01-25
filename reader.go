@@ -2,7 +2,6 @@ package klevdb
 
 import (
 	"bytes"
-	"errors"
 	"sync"
 
 	art "github.com/plar/go-adaptive-radix-tree"
@@ -10,7 +9,6 @@ import (
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
-	"github.com/klev-dev/kleverr"
 )
 
 type reader struct {
@@ -332,11 +330,11 @@ func (ix *readerIndex) Consume(offset int64) (int64, int64, error) {
 	position, err := index.Consume(ix.items, offset)
 	if err != nil && ix.head {
 		switch {
-		case errors.Is(err, index.ErrIndexEmpty):
+		case err == index.ErrIndexEmpty:
 			if offset <= ix.nextOffset {
 				return -1, ix.nextOffset, nil
 			}
-		case errors.Is(err, message.ErrInvalidOffset):
+		case err == message.ErrInvalidOffset:
 			if offset == ix.nextOffset {
 				return -1, ix.nextOffset, nil
 			}
@@ -347,8 +345,8 @@ func (ix *readerIndex) Consume(offset int64) (int64, int64, error) {
 
 func (ix *readerIndex) Get(offset int64) (int64, error) {
 	position, err := index.Get(ix.items, offset)
-	if err != nil && ix.head && errors.Is(err, message.ErrNotFound) && offset >= ix.nextOffset {
-		return -1, kleverr.Newf("%w: offset %d after end of log", message.ErrInvalidOffset, offset)
+	if err == message.ErrNotFound && ix.head && offset >= ix.nextOffset {
+		return -1, message.ErrInvalidOffset
 	}
 	return position, err
 }

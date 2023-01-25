@@ -278,16 +278,13 @@ func (ix *writerIndex) Consume(offset int64) (int64, int64, error) {
 	defer ix.mu.RUnlock()
 
 	position, err := index.Consume(ix.items, offset)
-	if err != nil {
-		switch {
-		case errors.Is(err, index.ErrIndexEmpty):
-			if nextOffset := ix.nextOffset.Load(); offset <= nextOffset {
-				return -1, nextOffset, nil
-			}
-		case errors.Is(err, message.ErrInvalidOffset):
-			if nextOffset := ix.nextOffset.Load(); offset == nextOffset {
-				return -1, nextOffset, nil
-			}
+	if err == index.ErrIndexEmpty {
+		if nextOffset := ix.nextOffset.Load(); offset <= nextOffset {
+			return -1, nextOffset, nil
+		}
+	} else if err == message.ErrInvalidOffset {
+		if nextOffset := ix.nextOffset.Load(); offset == nextOffset {
+			return -1, nextOffset, nil
 		}
 	}
 	return position, offset, err
@@ -298,12 +295,9 @@ func (ix *writerIndex) Get(offset int64) (int64, error) {
 	defer ix.mu.RUnlock()
 
 	position, err := index.Get(ix.items, offset)
-	if err != nil {
-		switch {
-		case errors.Is(err, message.ErrNotFound):
-			if nextOffset := ix.nextOffset.Load(); offset >= nextOffset {
-				return 0, kleverr.Newf("%w: offset %d after end of log", message.ErrInvalidOffset, offset)
-			}
+	if err == message.ErrNotFound {
+		if nextOffset := ix.nextOffset.Load(); offset >= nextOffset {
+			return 0, message.ErrInvalidOffset
 		}
 	}
 	return position, err

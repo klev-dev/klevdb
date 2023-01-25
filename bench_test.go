@@ -290,6 +290,33 @@ func benchmarkGet(b *testing.B) {
 		b.StopTimer()
 	})
 
+	b.Run("ByKey/R", func(b *testing.B) {
+		dir := MkdirBench(b)
+		defer os.RemoveAll(dir)
+
+		l, err := Open(dir, Options{KeyIndex: true})
+		require.NoError(b, err)
+		defer l.Close()
+
+		msgs := fillLog(b, l)
+		require.NoError(b, l.Close())
+
+		b.SetBytes(l.Size(msgs[0]))
+		b.ResetTimer()
+
+		l, err = Open(dir, Options{KeyIndex: true, Readonly: true})
+		require.NoError(b, err)
+		defer l.Close()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := l.GetByKey(msgs[i].Key); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.StopTimer()
+	})
+
 	b.Run("ByTime", func(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
@@ -302,6 +329,33 @@ func benchmarkGet(b *testing.B) {
 
 		b.SetBytes(l.Size(msgs[0]))
 		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := l.GetByTime(msgs[i].Time); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.StopTimer()
+	})
+
+	b.Run("ByTime/R", func(b *testing.B) {
+		dir := MkdirBench(b)
+		defer os.RemoveAll(dir)
+
+		l, err := Open(dir, Options{TimeIndex: true})
+		require.NoError(b, err)
+		defer l.Close()
+
+		msgs := fillLog(b, l)
+		require.NoError(b, l.Close())
+
+		b.SetBytes(l.Size(msgs[0]))
+		b.ResetTimer()
+
+		l, err = Open(dir, Options{TimeIndex: true, Readonly: true})
+		require.NoError(b, err)
+		defer l.Close()
 
 		for i := 0; i < b.N; i++ {
 			if _, err := l.GetByTime(msgs[i].Time); err != nil {

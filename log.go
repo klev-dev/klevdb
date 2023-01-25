@@ -191,7 +191,7 @@ func (l *log) Consume(offset int64, maxCount int64) (int64, []message.Message, e
 	rdr, index := segment.Consume(l.readers, offset)
 
 	nextOffset, msgs, err := rdr.Consume(offset, maxCount)
-	if err != nil && errors.Is(err, message.ErrInvalidOffset) {
+	if err != nil && err == message.ErrInvalidOffset {
 		if index < len(l.readers)-1 {
 			// this is after the end, consume starting the next one
 			next := l.readers[index+1]
@@ -233,7 +233,7 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 		switch msg, err := rdr.GetByKey(key, hash); {
 		case err == nil:
 			return msg, nil
-		case errors.Is(err, message.ErrNotFound):
+		case err == message.ErrNotFound:
 			// not in this segment, try the rest
 		default:
 			return message.Invalid, err
@@ -268,12 +268,12 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 		switch msg, err := rdr.GetByTime(ts); {
 		case err == nil:
 			return msg, nil
-		case errors.Is(err, message.ErrNotFound):
+		case err == message.ErrNotFound:
 			// not in this segment, try the rest
 			if i == 0 {
 				return rdr.Get(message.OffsetOldest)
 			}
-		case errors.Is(err, message.ErrInvalidOffset):
+		case err == message.ErrInvalidOffset:
 			// time is between end of this and begin next
 			if i < len(l.readers)-1 {
 				nextRdr := l.readers[i+1]
