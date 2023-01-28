@@ -227,30 +227,6 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 	return r, nil
 }
 
-func (r *reader) getMessages() (*message.Reader, error) {
-	r.messagesMu.RLock()
-	if msgs := r.messages; msgs != nil {
-		r.messagesMu.RUnlock()
-		return msgs, nil
-	}
-	r.messagesMu.RUnlock()
-
-	r.messagesMu.Lock()
-	defer r.messagesMu.Unlock()
-
-	if msgs := r.messages; msgs != nil {
-		return msgs, nil
-	}
-
-	msgs, err := message.OpenReaderMem(r.segment.Log)
-	if err != nil {
-		return nil, err
-	}
-
-	r.messages = msgs
-	return r.messages, nil
-}
-
 func (r *reader) getIndex() (indexer, error) {
 	r.indexMu.RLock()
 	if ix := r.index; ix != nil {
@@ -273,6 +249,30 @@ func (r *reader) getIndex() (indexer, error) {
 
 	r.index = newReaderIndex(items, r.params.Keys, r.segment.Offset, r.head)
 	return r.index, nil
+}
+
+func (r *reader) getMessages() (*message.Reader, error) {
+	r.messagesMu.RLock()
+	if msgs := r.messages; msgs != nil {
+		r.messagesMu.RUnlock()
+		return msgs, nil
+	}
+	r.messagesMu.RUnlock()
+
+	r.messagesMu.Lock()
+	defer r.messagesMu.Unlock()
+
+	if msgs := r.messages; msgs != nil {
+		return msgs, nil
+	}
+
+	msgs, err := message.OpenReaderMem(r.segment.Log)
+	if err != nil {
+		return nil, err
+	}
+
+	r.messages = msgs
+	return r.messages, nil
 }
 
 func (r *reader) Close() error {
