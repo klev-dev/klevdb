@@ -37,11 +37,15 @@ func (o Params) Size() int64 {
 	return sz
 }
 
-func (o Params) NewItem(m message.Message, position int64) Item {
+func (o Params) NewItem(m message.Message, position int64, prevts int64) Item {
 	it := Item{Offset: m.Offset, Position: position}
 
 	if o.Times {
 		it.Timestamp = m.Time.UnixMicro()
+		// guarantee timestamp monotonic increase
+		if it.Timestamp < prevts {
+			it.Timestamp = prevts
+		}
 	}
 
 	if o.Keys {

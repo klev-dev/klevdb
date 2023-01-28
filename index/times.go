@@ -1,6 +1,8 @@
 package index
 
 import (
+	"sort"
+
 	"github.com/klev-dev/klevdb/message"
 )
 
@@ -23,22 +25,10 @@ func Time(items []Item, ts int64) (int64, error) {
 	switch {
 	case endItem.Timestamp < ts:
 		return 0, message.ErrInvalidOffset
-	case endItem.Timestamp == ts:
-		return endItem.Position, nil
 	}
 
-	for beginIndex <= endIndex {
-		midIndex := (beginIndex + endIndex) / 2
-		midItem := items[midIndex]
-		switch {
-		case midItem.Timestamp < ts:
-			beginIndex = midIndex + 1
-		case midItem.Timestamp > ts:
-			endIndex = midIndex - 1
-		default:
-			return midItem.Position, nil
-		}
-	}
-
-	return items[beginIndex].Position, nil
+	foundIndex := sort.Search(len(items), func(midIndex int) bool {
+		return items[midIndex].Timestamp >= ts
+	})
+	return items[foundIndex].Position, nil
 }

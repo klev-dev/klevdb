@@ -24,7 +24,7 @@ type writer struct {
 	reader   *reader
 }
 
-func openWriter(seg segment.Segment, params index.Params) (*writer, error) {
+func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writer, error) {
 	messages, err := message.OpenWriter(seg.Log)
 	if err != nil {
 		return nil, err
@@ -36,9 +36,9 @@ func openWriter(seg segment.Segment, params index.Params) (*writer, error) {
 		if err != nil {
 			return nil, err
 		}
-		ix = newWriterIndex(indexItems, params.Keys, seg.Offset)
+		ix = newWriterIndex(indexItems, params.Keys, seg.Offset, nextTime)
 	} else {
-		ix = newWriterIndex(nil, params.Keys, seg.Offset)
+		ix = newWriterIndex(nil, params.Keys, seg.Offset, nextTime)
 	}
 
 	items, err := index.OpenWriter(seg.Index, params)
@@ -71,10 +71,7 @@ func (w *writer) NeedsRollover(rollover int64) bool {
 }
 
 func (w *writer) Publish(msgs []message.Message) (int64, error) {
-	nextOffset, err := w.index.GetNextOffset()
-	if err != nil {
-		return OffsetInvalid, err
-	}
+	nextOffset, indexTime := w.index.getNext()
 
 	items := make([]index.Item, len(msgs))
 	for i := range msgs {
@@ -88,22 +85,20 @@ func (w *writer) Publish(msgs []message.Message) (int64, error) {
 			return OffsetInvalid, err
 		}
 
-		items[i] = w.params.NewItem(msgs[i], position)
+		items[i] = w.params.NewItem(msgs[i], position, indexTime)
 		if err := w.items.Write(items[i]); err != nil {
 			return OffsetInvalid, err
 		}
+		indexTime = items[i].Timestamp
 	}
 
 	return w.index.append(items), nil
 }
 
-func (w *writer) ReopenReader() (*reader, int64, error) {
+func (w *writer) ReopenReader() (*reader, int64, int64) {
 	rdr := reopenReader(w.segment, w.params, w.index.reader())
-	nextOffset, err := w.index.GetNextOffset()
-	if err != nil {
-		return nil, OffsetInvalid, err
-	}
-	return rdr, nextOffset, nil
+	nextOffset, nextTime := w.index.getNext()
+	return rdr, nextOffset, nextTime
 }
 
 var errSegmentChanged = errors.New("writing segment changed")
@@ -130,13 +125,9 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 			return nil, nil, err
 		}
 
-		nextOffset, err := w.index.GetNextOffset()
-		if err != nil {
-			return nil, nil, err
-		}
-
+		nextOffset, nextTime := w.index.getNext()
 		nseg := segment.New(w.segment.Dir, nextOffset)
-		nwrt, err := openWriter(nseg, w.params)
+		nwrt, err := openWriter(nseg, w.params, nextTime)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -160,17 +151,13 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		}
 
 		// first move the replacement
+		nextOffset, nextTime := w.index.getNext()
 		if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
-			nextOffset, err := w.index.GetNextOffset()
-			if err != nil {
-				return nil, nil, err
-			}
-
 			rdr := openReader(nseg, w.params, false)
-			wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params)
+			wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params, nextTime)
 			return wrt, rdr, err
 		} else {
-			wrt, err := openWriter(nseg, w.params)
+			wrt, err := openWriter(nseg, w.params, nextTime)
 			return wrt, nil, err
 		}
 	}
@@ -179,17 +166,13 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		return nil, nil, err
 	}
 
+	nextOffset, nextTime := w.index.getNext()
 	if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
-		nextOffset, err := w.index.GetNextOffset()
-		if err != nil {
-			return nil, nil, err
-		}
-
 		rdr := openReader(w.segment, w.params, false)
-		wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params)
+		wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params, nextTime)
 		return wrt, rdr, err
 	} else {
-		wrt, err := openWriter(w.segment, w.params)
+		wrt, err := openWriter(w.segment, w.params, nextTime)
 		return wrt, nil, err
 	}
 }
@@ -219,11 +202,12 @@ type writerIndex struct {
 	items      []index.Item
 	keys       art.Tree
 	nextOffset atomic.Int64
+	nextTime   atomic.Int64
 
 	mu sync.RWMutex
 }
 
-func newWriterIndex(items []index.Item, hasKeys bool, offset int64) *writerIndex {
+func newWriterIndex(items []index.Item, hasKeys bool, offset int64, timestamp int64) *writerIndex {
 	var keys art.Tree
 	if hasKeys {
 		keys = art.New()
@@ -236,16 +220,23 @@ func newWriterIndex(items []index.Item, hasKeys bool, offset int64) *writerIndex
 	}
 
 	nextOffset := offset
+	nextTime := timestamp
 	if len(items) > 0 {
 		nextOffset = items[len(items)-1].Offset + 1
+		nextTime = items[len(items)-1].Timestamp
 	}
 	ix.nextOffset.Store(nextOffset)
+	ix.nextTime.Store(nextTime)
 
 	return ix
 }
 
 func (ix *writerIndex) GetNextOffset() (int64, error) {
 	return ix.nextOffset.Load(), nil
+}
+
+func (ix *writerIndex) getNext() (int64, int64) {
+	return ix.nextOffset.Load(), ix.nextTime.Load()
 }
 
 func (ix *writerIndex) getLastOffset() int64 {
@@ -262,6 +253,9 @@ func (ix *writerIndex) append(items []index.Item) int64 {
 	ix.items = append(ix.items, items...)
 	if ix.keys != nil {
 		index.AppendKeys(ix.keys, items)
+	}
+	if ln := len(items); ln > 0 {
+		ix.nextTime.Store(items[ln-1].Timestamp)
 	}
 	return ix.nextOffset.Add(int64(len(items)))
 }

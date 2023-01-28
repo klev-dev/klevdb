@@ -67,7 +67,7 @@ func Open(dir string, opts Options) (Log, error) {
 			rdr := reopenReader(segment.New(dir, 0), params, ix)
 			l.readers = []*reader{rdr}
 		} else {
-			w, err := openWriter(segment.New(dir, 0), params)
+			w, err := openWriter(segment.New(dir, 0), params, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -91,7 +91,7 @@ func Open(dir string, opts Options) (Log, error) {
 			rdr := openReader(head, params, true)
 			l.readers = append(l.readers, rdr)
 		} else {
-			wrt, err := openWriter(head, params)
+			wrt, err := openWriter(head, params, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -132,12 +132,8 @@ func (l *log) Publish(msgs []message.Message) (int64, error) {
 			return OffsetInvalid, err
 		}
 
-		oldReader, nextOffset, err := l.writer.ReopenReader()
-		if err != nil {
-			return OffsetInvalid, err
-		}
-
-		newWriter, err := openWriter(segment.New(l.dir, nextOffset), l.params)
+		oldReader, nextOffset, nextTime := l.writer.ReopenReader()
+		newWriter, err := openWriter(segment.New(l.dir, nextOffset), l.params, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}

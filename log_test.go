@@ -431,6 +431,30 @@ func TestByTime(t *testing.T) {
 	})
 }
 
+func TestByTimeMono(t *testing.T) {
+	l, err := Open(t.TempDir(), Options{
+		TimeIndex: true,
+	})
+	require.NoError(t, err)
+	defer l.Close()
+
+	msgs := message.Gen(5)
+	msgs[1], msgs[3] = msgs[3], msgs[1]
+	publishBatched(t, l, msgs, 1)
+
+	gmsg, err := l.GetByTime(msgs[1].Time)
+	require.NoError(t, err)
+	require.Equal(t, msgs[1], gmsg)
+
+	gmsg, err = l.GetByTime(msgs[2].Time)
+	require.NoError(t, err)
+	require.Equal(t, msgs[1], gmsg)
+
+	gmsg, err = l.GetByTime(msgs[3].Time)
+	require.NoError(t, err)
+	require.Equal(t, msgs[1], gmsg)
+}
+
 func TestReopen(t *testing.T) {
 	t.Run("Segment", testReopenSegment)
 	t.Run("Segments", testReopenSegments)

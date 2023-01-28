@@ -82,7 +82,7 @@ func (s Segment) Check(params index.Params) error {
 	}
 	defer log.Close()
 
-	var position int64
+	var position, indexTime int64
 	var logIndex []index.Item
 	for {
 		msg, nextPosition, err := log.Read(position)
@@ -91,8 +91,12 @@ func (s Segment) Check(params index.Params) error {
 		} else if err != nil {
 			return err
 		}
-		logIndex = append(logIndex, params.NewItem(msg, position))
+
+		item := params.NewItem(msg, position, indexTime)
+		logIndex = append(logIndex, item)
+
 		position = nextPosition
+		indexTime = item.Timestamp
 	}
 
 	switch items, err := index.Read(s.Index, params); {
@@ -126,7 +130,7 @@ func (s Segment) Recover(params index.Params) error {
 	}
 	defer restore.Close()
 
-	var position int64
+	var position, indexTime int64
 	var corrupted = false
 	var logIndex []index.Item
 	for {
@@ -143,8 +147,12 @@ func (s Segment) Recover(params index.Params) error {
 		if _, err := restore.Write(msg); err != nil {
 			return err
 		}
-		logIndex = append(logIndex, params.NewItem(msg, position))
+
+		item := params.NewItem(msg, position, indexTime)
+		logIndex = append(logIndex, item)
+
 		position = nextPosition
+		indexTime = item.Timestamp
 	}
 
 	if err := log.Close(); err != nil {
@@ -230,7 +238,7 @@ func (s Segment) Reindex(params index.Params) ([]index.Item, error) {
 }
 
 func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]index.Item, error) {
-	var position int64
+	var position, indexTime int64
 	var items []index.Item
 	for {
 		msg, nextPosition, err := log.Read(position)
@@ -239,8 +247,12 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]inde
 		} else if err != nil {
 			return nil, err
 		}
-		items = append(items, params.NewItem(msg, position))
+
+		item := params.NewItem(msg, position, indexTime)
+		items = append(items, item)
+
 		position = nextPosition
+		indexTime = item.Timestamp
 	}
 
 	if err := index.Write(s.Index, params, items); err != nil {
@@ -360,7 +372,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 	result.SurviveOffsets = map[int64]struct{}{}
 	result.DeletedOffsets = map[int64]struct{}{}
 
-	var srcPosition int64
+	var srcPosition, indexTime int64
 	var dstItems []index.Item
 	for {
 		msg, nextSrcPosition, err := srcLog.Read(srcPosition)
@@ -380,7 +392,10 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 				return nil, err
 			}
 			result.SurviveOffsets[msg.Offset] = struct{}{}
-			dstItems = append(dstItems, params.NewItem(msg, dstPosition))
+
+			item := params.NewItem(msg, dstPosition, indexTime)
+			dstItems = append(dstItems, item)
+			indexTime = item.Timestamp
 		}
 
 		srcPosition = nextSrcPosition

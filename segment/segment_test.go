@@ -217,11 +217,14 @@ func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []messag
 	iw, err := index.OpenWriter(seg.Index, params)
 	require.NoError(t, err)
 
+	var indexTime int64
 	for _, msg := range msgs {
 		pos, err := lw.Write(msg)
 		require.NoError(t, err)
-		err = iw.Write(params.NewItem(msg, pos))
+		item := params.NewItem(msg, pos, indexTime)
+		err = iw.Write(item)
 		require.NoError(t, err)
+		indexTime = item.Timestamp
 	}
 
 	require.NoError(t, iw.Close())
