@@ -408,11 +408,11 @@ func TestByTime(t *testing.T) {
 		before := msgs[len(msgs)-1].Time.Add(time.Hour)
 
 		gmsg, err := l.GetByTime(before)
-		require.ErrorIs(t, err, ErrInvalidOffset)
+		require.ErrorIs(t, err, ErrNotFound)
 		require.Equal(t, InvalidMessage, gmsg)
 
 		ooff, ots, err := l.OffsetByTime(before)
-		require.ErrorIs(t, err, ErrInvalidOffset)
+		require.ErrorIs(t, err, ErrNotFound)
 		require.Equal(t, OffsetInvalid, ooff)
 		require.Zero(t, ots)
 	})

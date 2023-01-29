@@ -15,7 +15,7 @@ func Time(items []Item, ts int64) (int64, error) {
 	beginItem := items[beginIndex]
 	switch {
 	case ts < beginItem.Timestamp:
-		return 0, message.ErrNotFound
+		return 0, message.ErrInvalidOffset
 	case ts == beginItem.Timestamp:
 		return beginItem.Position, nil
 	}
@@ -24,7 +24,7 @@ func Time(items []Item, ts int64) (int64, error) {
 	endItem := items[endIndex]
 	switch {
 	case endItem.Timestamp < ts:
-		return 0, message.ErrInvalidOffset
+		return 0, message.ErrNotFound
 	}
 
 	foundIndex := sort.Search(len(items), func(midIndex int) bool {

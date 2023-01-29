@@ -27,13 +27,13 @@ func TestTime(t *testing.T) {
 	t.Run("Before", func(t *testing.T) {
 		items := gen(1)
 		_, err := Time(items, 0)
-		require.ErrorIs(t, message.ErrNotFound, err)
+		require.ErrorIs(t, message.ErrInvalidOffset, err)
 	})
 
 	t.Run("After", func(t *testing.T) {
 		items := gen(1)
 		_, err := Time(items, 2)
-		require.ErrorIs(t, message.ErrInvalidOffset, err)
+		require.ErrorIs(t, message.ErrNotFound, err)
 	})
 
 	t.Run("Exact", func(t *testing.T) {

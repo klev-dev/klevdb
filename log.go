@@ -264,12 +264,12 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 		switch msg, err := rdr.GetByTime(ts); {
 		case err == nil:
 			return msg, nil
-		case err == message.ErrNotFound:
+		case err == message.ErrInvalidOffset:
 			// not in this segment, try the rest
 			if i == 0 {
 				return rdr.Get(message.OffsetOldest)
 			}
-		case err == message.ErrInvalidOffset:
+		case err == message.ErrNotFound:
 			// time is between end of this and begin next
 			if i < len(l.readers)-1 {
 				nextRdr := l.readers[i+1]
@@ -282,7 +282,7 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 		}
 	}
 
-	return message.Invalid, nil
+	return message.Invalid, kleverr.Newf("time %w", message.ErrNotFound)
 }
 
 func (l *log) OffsetByTime(start time.Time) (int64, time.Time, error) {
