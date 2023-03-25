@@ -1,7 +1,8 @@
 # klevdb
 
-![CI](https://github.com/klev-dev/klevdb/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/klev-dev/klevdb/actions/workflows/ci.yml/badge.svg)](https://github.com/klev-dev/klevdb/actions)
 [![Go Reference](https://pkg.go.dev/badge/github.com/klev-dev/klevdb.svg)](https://pkg.go.dev/github.com/klev-dev/klevdb)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 klevdb is a fast message store, written in Go. Think single partition on kafka, but stored locally.
 
