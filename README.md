@@ -1,5 +1,7 @@
 # klevdb
 
+![CI](https://github.com/klev-dev/klevdb/actions/workflows/ci.yml/badge.svg)
+
 klevdb is a fast message store, written in Go. Think single partition on kafka, but stored locally.
 
 In addition to basic consuming by offset, you can also configure klevdb to index times and keys. Times index allow you to quickly find a message by its time (or the first message after a certain time). Keys index allow you to quickly find the last message with a given key.
