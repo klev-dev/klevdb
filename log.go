@@ -198,6 +198,38 @@ func (l *log) Consume(offset int64, maxCount int64) (int64, []message.Message, e
 	return nextOffset, msgs, err
 }
 
+func (l *log) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []message.Message, error) {
+	if !l.opts.KeyIndex {
+		return OffsetInvalid, nil, kleverr.Newf("%w by key", ErrNoIndex)
+	}
+
+	hasher := fnv.New64a()
+	hasher.Write(key)
+	hash := make([]byte, 8)
+	binary.BigEndian.PutUint64(hash, hasher.Sum64())
+
+	l.readersMu.RLock()
+	defer l.readersMu.RUnlock()
+
+	rdr, index := segment.Consume(l.readers, offset)
+	for {
+		nextOffset, msgs, err := rdr.ConsumeByKey(key, hash, offset, maxCount)
+		if err != nil {
+			return nextOffset, msgs, err
+		}
+		if len(msgs) > 0 {
+			return nextOffset, msgs, err
+		}
+		if index >= len(l.readers)-1 {
+			return nextOffset, msgs, err
+		}
+
+		index += 1
+		rdr = l.readers[index]
+		offset = message.OffsetOldest
+	}
+}
+
 func (l *log) Get(offset int64) (message.Message, error) {
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()

@@ -75,6 +75,9 @@ type Log interface {
 	//   to the head of the log in which case they are equal.
 	Consume(offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
 
+	// ConsumeByKey is similar to Consume, but only returns messages matching the key
+	ConsumeByKey(key []byte, offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
+
 	// Get retrieves a single message, by its offset
 	// If offset == OffsetOldest, it returns the first message on the log
 	// If offset == OffsetNewest, it returns the last message on the log

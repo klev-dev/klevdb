@@ -275,6 +275,11 @@ func TestByKey(t *testing.T) {
 		ooff, err := l.OffsetByKey([]byte("key"))
 		require.ErrorIs(t, err, ErrNoIndex)
 		require.Equal(t, OffsetInvalid, ooff)
+
+		coff, cmsgs, err := l.ConsumeByKey([]byte("key"), OffsetOldest, 32)
+		require.ErrorIs(t, err, ErrNoIndex)
+		require.Equal(t, OffsetInvalid, coff)
+		require.Nil(t, cmsgs)
 	})
 
 	msgs := message.Gen(4)
@@ -293,12 +298,17 @@ func TestByKey(t *testing.T) {
 		ooff, err := l.OffsetByKey(msgs[0].Key)
 		require.ErrorIs(t, err, ErrNotFound)
 		require.Equal(t, OffsetInvalid, ooff)
+
+		coff, cmsgs, err := l.ConsumeByKey(msgs[0].Key, OffsetOldest, 32)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), coff)
+		require.Nil(t, cmsgs)
 	})
 
 	t.Run("Put", func(t *testing.T) {
 		publishBatched(t, l, msgs, 1)
 
-		for _, msg := range msgs {
+		for i, msg := range msgs {
 			gmsg, err := l.GetByKey(msg.Key)
 			require.NoError(t, err)
 			require.Equal(t, msg, gmsg)
@@ -306,7 +316,26 @@ func TestByKey(t *testing.T) {
 			ooff, err := l.OffsetByKey(msg.Key)
 			require.NoError(t, err)
 			require.Equal(t, msg.Offset, ooff)
+
+			coff, cmsgs, err := l.ConsumeByKey(msg.Key, OffsetOldest, 32)
+			require.NoError(t, err)
+			require.Equal(t, int64(i+1), coff)
+			require.Len(t, cmsgs, 1)
+			require.Equal(t, msg, cmsgs[0])
+
+			// another seach would return empty
+			coff, cmsgs, err = l.ConsumeByKey(msg.Key, coff, 32)
+			require.NoError(t, err)
+			require.Equal(t, int64(4), coff)
+			require.Nil(t, cmsgs)
 		}
+	})
+
+	t.Run("After", func(t *testing.T) {
+		coff, cmsgs, err := l.ConsumeByKey(msgs[0].Key, msgs[1].Offset, 32)
+		require.NoError(t, err)
+		require.Equal(t, int64(4), coff)
+		require.Nil(t, cmsgs)
 	})
 
 	t.Run("Missing", func(t *testing.T) {
@@ -317,6 +346,11 @@ func TestByKey(t *testing.T) {
 		ooff, err := l.OffsetByKey([]byte("key"))
 		require.ErrorIs(t, err, ErrNotFound)
 		require.Equal(t, OffsetInvalid, ooff)
+
+		coff, cmsgs, err := l.ConsumeByKey([]byte("key"), OffsetOldest, 32)
+		require.NoError(t, err)
+		require.Equal(t, int64(4), coff)
+		require.Nil(t, cmsgs)
 	})
 
 	t.Run("Update", func(t *testing.T) {
@@ -337,6 +371,18 @@ func TestByKey(t *testing.T) {
 			ooff, err := l.OffsetByKey(msgs[i].Key)
 			require.NoError(t, err)
 			require.Equal(t, nmsgs[i].Offset, ooff)
+
+			coff, cmsgs, err := l.ConsumeByKey(msgs[i].Key, OffsetOldest, 32)
+			require.NoError(t, err)
+			require.Equal(t, int64(i+1), coff)
+			require.Len(t, cmsgs, 1)
+			require.Equal(t, msgs[i], cmsgs[0])
+
+			coff, cmsgs, err = l.ConsumeByKey(msgs[i].Key, coff, 32)
+			require.NoError(t, err)
+			require.Equal(t, int64(len(msgs)+i+1), coff)
+			require.Len(t, cmsgs, 1)
+			require.Equal(t, nmsgs[i], cmsgs[0])
 		}
 	})
 }

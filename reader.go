@@ -2,6 +2,7 @@ package klevdb
 
 import (
 	"bytes"
+	"errors"
 	"sync"
 
 	art "github.com/plar/go-adaptive-radix-tree"
@@ -109,6 +110,65 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
+	return msgs[len(msgs)-1].Offset + 1, msgs, nil
+}
+
+func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
+	index, err := r.getIndex()
+	if err != nil {
+		return OffsetInvalid, nil, err
+	}
+
+	if offset == OffsetNewest {
+		nextOffset, err := index.GetNextOffset()
+		if err != nil {
+			return OffsetInvalid, nil, err
+		}
+		return nextOffset, nil, nil
+	}
+
+	positions, err := index.Keys(keyHash)
+	if err != nil {
+		if errors.Is(err, message.ErrNotFound) {
+			nextOffset, err := index.GetNextOffset()
+			if err != nil {
+				return OffsetInvalid, nil, err
+			}
+			return nextOffset, nil, nil
+		}
+		return OffsetInvalid, nil, err
+	}
+
+	messages, err := r.getMessages()
+	if err != nil {
+		return OffsetInvalid, nil, err
+	}
+
+	var msgs []message.Message
+	for i := 0; i < len(positions); i++ {
+		msg, err := messages.Get(positions[i])
+		if err != nil {
+			return OffsetInvalid, nil, err
+		}
+		if msg.Offset < offset {
+			continue
+		}
+		if bytes.Equal(key, msg.Key) {
+			msgs = append(msgs, msg)
+			if len(msgs) >= int(maxCount) {
+				break
+			}
+		}
+	}
+
+	if len(msgs) == 0 {
+		nextOffset, err := index.GetNextOffset()
+		if err != nil {
+			return OffsetInvalid, nil, err
+		}
+		return nextOffset, nil, nil
+	}
+
 	return msgs[len(msgs)-1].Offset + 1, msgs, nil
 }
 

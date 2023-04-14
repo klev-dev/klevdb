@@ -1,7 +1,10 @@
 default: test
 
-.PHONY: test
+.PHONY: test test-verbose
 test:
+	go test -cover ./...
+
+test-verbose:
 	go test -cover -v ./...
 
 .PHONY: bench bench-publish bench-consume bench-get bench-multi
