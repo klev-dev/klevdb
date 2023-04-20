@@ -323,7 +323,7 @@ func TestByKey(t *testing.T) {
 			require.Len(t, cmsgs, 1)
 			require.Equal(t, msg, cmsgs[0])
 
-			// another seach would return empty
+			// another search would return empty
 			coff, cmsgs, err = l.ConsumeByKey(msg.Key, coff, 32)
 			require.NoError(t, err)
 			require.Equal(t, int64(4), coff)
@@ -621,6 +621,8 @@ func testReadonlyEmpty(t *testing.T) {
 
 	coff, cmsgs, err = l.Consume(1, 1)
 	require.ErrorIs(t, err, ErrInvalidOffset)
+	require.Equal(t, OffsetInvalid, coff)
+	require.Empty(t, cmsgs)
 
 	// Get checks
 	_, err = l.Get(OffsetOldest)
@@ -715,6 +717,8 @@ func testReadonlySegment(t *testing.T) {
 
 	coff, cmsgs, err = l.Consume(5, 1)
 	require.ErrorIs(t, err, ErrInvalidOffset)
+	require.Equal(t, OffsetInvalid, coff)
+	require.Empty(t, cmsgs)
 
 	// Get checks
 	gmsg, err := l.Get(OffsetOldest)
@@ -820,6 +824,8 @@ func testReadonlySegments(t *testing.T) {
 
 	coff, cmsgs, err = l.Consume(5, 1)
 	require.ErrorIs(t, err, ErrInvalidOffset)
+	require.Equal(t, OffsetInvalid, coff)
+	require.Empty(t, cmsgs)
 
 	// Get checks
 	gmsg, err := l.Get(OffsetOldest)
