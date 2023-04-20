@@ -10,9 +10,13 @@ import (
 )
 
 // Deletes tries to remove messages with nil value before given time.
-//   It will not remove messages for keys it sees before that offset.
+//
+//	It will not remove messages for keys it sees before that offset.
+//
 // This is similar to removing keys, which were deleted (e.g. value set to nil)
-//   and are therfore no longer relevant/active.
+//
+//	and are therfore no longer relevant/active.
+//
 // returns the offsets it deleted and the amount of storage freed
 func Deletes(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, int64, error) {
 	maxOffset, err := l.NextOffset()

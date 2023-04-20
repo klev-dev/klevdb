@@ -10,9 +10,13 @@ import (
 )
 
 // Updates tries to remove messages before given time that are repeated
-//   further in the log leaving only the last message for a given key.
+//
+//	further in the log leaving only the last message for a given key.
+//
 // This is similar to removing the old value updates,
-//   leaving only the current value (last update) for a key.
+//
+//	leaving only the current value (last update) for a key.
+//
 // returns the offsets it deleted and the amount of storage freed
 func Updates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, int64, error) {
 	maxOffset, err := l.NextOffset()
