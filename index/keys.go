@@ -2,11 +2,24 @@ package index
 
 import (
 	"encoding/binary"
+	"hash/fnv"
 
 	art "github.com/plar/go-adaptive-radix-tree"
 
 	"github.com/klev-dev/klevdb/message"
 )
+
+func KeyHash(key []byte) uint64 {
+	hasher := fnv.New64a()
+	hasher.Write(key)
+	return hasher.Sum64()
+}
+
+func KeyHashEncoded(h uint64) []byte {
+	hash := make([]byte, 8)
+	binary.BigEndian.PutUint64(hash, h)
+	return hash
+}
 
 func AppendKeys(keys art.Tree, items []Item) {
 	hash := make([]byte, 8)

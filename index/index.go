@@ -1,8 +1,6 @@
 package index
 
 import (
-	"hash/fnv"
-
 	"github.com/klev-dev/klevdb/message"
 )
 
@@ -49,9 +47,7 @@ func (o Params) NewItem(m message.Message, position int64, prevts int64) Item {
 	}
 
 	if o.Keys {
-		hasher := fnv.New64a()
-		hasher.Write(m.Key)
-		it.KeyHash = hasher.Sum64()
+		it.KeyHash = KeyHash(m.Key)
 	}
 
 	return it
