@@ -61,20 +61,6 @@ func (s Segment) Stat(params index.Params) (Stats, error) {
 	}, nil
 }
 
-func (s Segment) Size() (int64, error) {
-	logStat, err := os.Stat(s.Log)
-	if err != nil {
-		return 0, kleverr.Newf("could not stat log: %w", err)
-	}
-
-	indexStat, err := os.Stat(s.Index)
-	if err != nil {
-		return 0, kleverr.Newf("could not stat index: %w", err)
-	}
-
-	return logStat.Size() + indexStat.Size(), nil
-}
-
 func (s Segment) Check(params index.Params) error {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {

@@ -22,10 +22,19 @@ const (
 
 type Message = message.Message
 
+// InvalidMessage returned when an error have occured
 var InvalidMessage = message.Invalid
+
+// ErrInvalidOffset error is returned when the offset attribute is invalid or out of bounds
 var ErrInvalidOffset = message.ErrInvalidOffset
+
+// ErrNotFound error is returned when the offset, key or timestamp is not found
 var ErrNotFound = message.ErrNotFound
+
+// ErrNoIndex error is returned when we try to use key or timestamp, but the log doesn't include index on them
 var ErrNoIndex = errors.New("no index")
+
+// ErrReadonly error is returned when attempting to modify (e.g. publish or delete) from a log that is open as a readonly
 var ErrReadonly = errors.New("log opened in readonly mode")
 
 type Stats = segment.Stats
@@ -131,12 +140,12 @@ func Stat(dir string, opts Options) (Stats, error) {
 	})
 }
 
-// Backup will backup a store directory to another location, without opening the store
+// Backup backups a store directory to another location, without opening the store
 func Backup(src, dst string) error {
 	return segment.BackupDir(src, dst)
 }
 
-// Check will run an integrity check, without opening the store
+// Check runs an integrity check, without opening the store
 func Check(dir string, opts Options) error {
 	return segment.CheckDir(dir, index.Params{
 		Times: opts.TimeIndex,

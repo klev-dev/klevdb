@@ -17,6 +17,7 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
+// Open create a log based on a dir and set of options
 func Open(dir string, opts Options) (Log, error) {
 	if opts.Rollover == 0 {
 		opts.Rollover = 1024 * 1024
