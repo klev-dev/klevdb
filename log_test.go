@@ -1091,7 +1091,7 @@ func testDeleteReaderPartial(t *testing.T) {
 	require.Equal(t, 2, stats.Segments)
 
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		0: struct{}{},
+		0: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 1)
@@ -1144,7 +1144,7 @@ func testDeleteReaderPartialReload(t *testing.T) {
 	require.Equal(t, 2, stats.Segments)
 
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		0: struct{}{},
+		0: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 1)
@@ -1187,8 +1187,8 @@ func testDeleteReaderFull(t *testing.T) {
 	require.Equal(t, 2, stats.Segments)
 
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		0: struct{}{},
-		1: struct{}{},
+		0: {},
+		1: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 2)
@@ -1226,8 +1226,8 @@ func testDeleteWriterSingle(t *testing.T) {
 	require.Equal(t, 1, stats.Segments)
 
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		0: struct{}{},
-		1: struct{}{},
+		0: {},
+		1: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 2)
@@ -1268,7 +1268,7 @@ func testDeleteWriterLast(t *testing.T) {
 	require.Equal(t, int64(4), nextOffset)
 
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		3: struct{}{},
+		3: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 1)
@@ -1314,7 +1314,7 @@ func testDeleteWriterPartial(t *testing.T) {
 	require.Equal(t, 2, stats.Segments)
 
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		2: struct{}{},
+		2: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 1)
@@ -1359,8 +1359,8 @@ func testDeleteWriterFull(t *testing.T) {
 	require.Equal(t, 2, stats.Segments)
 
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		2: struct{}{},
-		3: struct{}{},
+		2: {},
+		3: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 2)
@@ -1408,8 +1408,8 @@ func testDeleteAll(t *testing.T) {
 
 	// delete the writer segment
 	offsets, sz, err := l.Delete(map[int64]struct{}{
-		2: struct{}{},
-		3: struct{}{},
+		2: {},
+		3: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 2)
@@ -1419,8 +1419,8 @@ func testDeleteAll(t *testing.T) {
 
 	// delete the reader segment
 	offsets, sz, err = l.Delete(map[int64]struct{}{
-		0: struct{}{},
-		1: struct{}{},
+		0: {},
+		1: {},
 	})
 	require.NoError(t, err)
 	require.Len(t, offsets, 2)
