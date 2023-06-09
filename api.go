@@ -22,7 +22,7 @@ const (
 
 type Message = message.Message
 
-// InvalidMessage returned when an error have occured
+// InvalidMessage returned when an error have occurred
 var InvalidMessage = message.Invalid
 
 // ErrInvalidOffset error is returned when the offset attribute is invalid or out of bounds
