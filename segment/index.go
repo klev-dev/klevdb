@@ -61,7 +61,11 @@ func Get[S ~[]O, O Offsetter](segments S, offset int64) (O, int, error) {
 	switch {
 	case offset < beginSegment.GetOffset():
 		var v O
-		return v, -1, kleverr.Newf("%w: %d is before beginning", message.ErrInvalidOffset, offset)
+		err := message.ErrNotFound
+		if beginSegment.GetOffset() == 0 {
+			err = message.ErrInvalidOffset
+		}
+		return v, -1, kleverr.Newf("%w: %d is before beginning", err, offset)
 	case offset == beginSegment.GetOffset():
 		return beginSegment, 0, nil
 	}

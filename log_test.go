@@ -1109,7 +1109,7 @@ func testDeleteReaderPartial(t *testing.T) {
 	require.Equal(t, msgs[1], dmsgs[0])
 
 	_, err = l.Get(0)
-	require.ErrorIs(t, err, ErrInvalidOffset)
+	require.ErrorIs(t, err, ErrNotFound)
 
 	_, err = l.GetByKey(msgs[0].Key)
 	require.ErrorIs(t, err, ErrNotFound)
@@ -1162,7 +1162,7 @@ func testDeleteReaderPartialReload(t *testing.T) {
 	require.Equal(t, msgs[1], dmsgs[0])
 
 	_, err = l.Get(0)
-	require.ErrorIs(t, err, ErrInvalidOffset)
+	require.ErrorIs(t, err, ErrNotFound)
 
 	_, err = l.GetByKey(msgs[0].Key)
 	require.ErrorIs(t, err, ErrNotFound)
