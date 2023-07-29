@@ -6,12 +6,12 @@ import (
 	"github.com/klev-dev/klevdb"
 )
 
-func ByCount(ctx context.Context, l klevdb.Log, max int64) (map[int64]struct{}, int64, error) {
+func ByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}, int64, error) {
 	stats, err := l.Stat()
 	switch {
 	case err != nil:
 		return nil, 0, err
-	case int64(stats.Messages) <= max:
+	case stats.Messages <= max:
 		return nil, 0, nil
 	}
 
@@ -22,7 +22,7 @@ func ByCount(ctx context.Context, l klevdb.Log, max int64) (map[int64]struct{}, 
 
 	var deleteOffsets = map[int64]struct{}{}
 
-	toRemove := int64(stats.Messages) - max
+	toRemove := stats.Messages - max
 	for offset := klevdb.OffsetOldest; offset < maxOffset && toRemove > 0; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
