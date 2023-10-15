@@ -256,8 +256,9 @@ func (ix *writerIndex) append(items []index.Item) int64 {
 	}
 	if ln := len(items); ln > 0 {
 		ix.nextTime.Store(items[ln-1].Timestamp)
+		ix.nextOffset.Store(items[ln-1].Offset + 1)
 	}
-	return ix.nextOffset.Add(int64(len(items)))
+	return ix.nextOffset.Load()
 }
 
 func (ix *writerIndex) reader() *readerIndex {
@@ -267,21 +268,21 @@ func (ix *writerIndex) reader() *readerIndex {
 	return &readerIndex{ix.items, ix.keys, ix.nextOffset.Load(), false}
 }
 
-func (ix *writerIndex) Consume(offset int64) (int64, int64, error) {
+func (ix *writerIndex) Consume(offset int64) (int64, int64, int64, error) {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 
-	position, err := index.Consume(ix.items, offset)
+	position, maxPosition, err := index.Consume(ix.items, offset)
 	if err == index.ErrIndexEmpty {
 		if nextOffset := ix.nextOffset.Load(); offset <= nextOffset {
-			return -1, nextOffset, nil
+			return -1, -1, nextOffset, nil
 		}
 	} else if err == message.ErrInvalidOffset {
 		if nextOffset := ix.nextOffset.Load(); offset == nextOffset {
-			return -1, nextOffset, nil
+			return -1, -1, nextOffset, nil
 		}
 	}
-	return position, offset, err
+	return position, maxPosition, offset, err
 }
 
 func (ix *writerIndex) Get(offset int64) (int64, error) {

@@ -26,7 +26,7 @@ type reader struct {
 
 type indexer interface {
 	GetNextOffset() (int64, error)
-	Consume(offset int64) (int64, int64, error)
+	Consume(offset int64) (int64, int64, int64, error)
 	Get(offset int64) (int64, error)
 	Keys(hash []byte) ([]int64, error)
 	Time(ts int64) (int64, error)
@@ -93,7 +93,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 		return nextOffset, nil, nil
 	}
 
-	position, nextOffset, err := index.Consume(offset)
+	position, maxPosition, nextOffset, err := index.Consume(offset)
 	switch {
 	case err != nil:
 		return OffsetInvalid, nil, err
@@ -106,7 +106,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 		return OffsetInvalid, nil, err
 	}
 
-	msgs, err := messages.Consume(position, maxCount)
+	msgs, err := messages.Consume(position, maxPosition, maxCount)
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
@@ -386,21 +386,21 @@ func (ix *readerIndex) GetNextOffset() (int64, error) {
 	return ix.nextOffset, nil
 }
 
-func (ix *readerIndex) Consume(offset int64) (int64, int64, error) {
-	position, err := index.Consume(ix.items, offset)
+func (ix *readerIndex) Consume(offset int64) (int64, int64, int64, error) {
+	position, maxPosition, err := index.Consume(ix.items, offset)
 	if err != nil && ix.head {
 		switch {
 		case err == index.ErrIndexEmpty:
 			if offset <= ix.nextOffset {
-				return -1, ix.nextOffset, nil
+				return -1, -1, ix.nextOffset, nil
 			}
 		case err == message.ErrInvalidOffset:
 			if offset == ix.nextOffset {
-				return -1, ix.nextOffset, nil
+				return -1, -1, ix.nextOffset, nil
 			}
 		}
 	}
-	return position, offset, err
+	return position, maxPosition, offset, err
 }
 
 func (ix *readerIndex) Get(offset int64) (int64, error) {

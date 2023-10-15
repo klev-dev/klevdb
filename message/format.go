@@ -136,9 +136,9 @@ func OpenReaderMem(path string) (*Reader, error) {
 	}, nil
 }
 
-func (r *Reader) Consume(position int64, maxCount int64) ([]Message, error) {
+func (r *Reader) Consume(position, maxPosition int64, maxCount int64) ([]Message, error) {
 	var msgs []Message
-	for int64(len(msgs)) < maxCount {
+	for int64(len(msgs)) < maxCount && position <= maxPosition {
 		msg, next, err := r.Read(position)
 		if errors.Is(err, io.EOF) {
 			break

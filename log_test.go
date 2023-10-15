@@ -1,6 +1,7 @@
 package klevdb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,8 +12,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/kleverr"
 )
 
 func publishBatched(t *testing.T, l Log, msgs []Message, batchLen int) {
@@ -1449,8 +1452,85 @@ func testDeleteAll(t *testing.T) {
 }
 
 func TestConcurrent(t *testing.T) {
+	t.Run("PubsubRecent", testConcurrentPubsubRecent)
 	t.Run("Consume", testConcurrentConsume)
 	t.Run("Delete", testConcurrentDelete)
+}
+
+func testConcurrentPubsubRecent(t *testing.T) {
+	defer os.RemoveAll("test_pubsub")
+	s, err := Open("test_pubsub", Options{
+		CreateDirs: true,
+		AutoSync:   true,
+		Check:      true,
+		Rollover:   1024 * 64,
+	})
+	require.NoError(t, err)
+	defer s.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		for i := 0; ctx.Err() == nil; i++ {
+			msgs := []Message{{
+				Key: []byte(fmt.Sprintf("%010d", i)),
+			}}
+			_, err := s.Publish(msgs)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var offset = OffsetOldest
+		for ctx.Err() == nil {
+			next, msgs, err := s.Consume(offset, 32)
+			if err != nil {
+				return kleverr.Newf("could not consume offset %d: %w", offset, err)
+			}
+
+			if offset == next {
+				offset = offset - 16
+				continue
+			}
+
+			offset = next
+			for _, msg := range msgs {
+				require.Equal(t, []byte(fmt.Sprintf("%010d", msg.Offset)), msg.Key)
+			}
+		}
+		return nil
+	})
+
+	// g.Go(func() error {
+	// 	for ctx.Err() == nil {
+	// 		_, msgs, err := s.Consume(OffsetOldest, 32)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		var del = make(map[int64]struct{}, len(msgs))
+	// 		for _, msg := range msgs {
+	// 			del[msg.Offset] = struct{}{}
+	// 		}
+	// 		_, _, err = s.Delete(del)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// 	return nil
+	// })
+
+	err = g.Wait()
+	if serr := kleverr.Get(err); serr != nil {
+		fmt.Println(serr.Print())
+	}
+	require.NoError(t, err)
 }
 
 func testConcurrentConsume(t *testing.T) {
