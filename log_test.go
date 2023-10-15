@@ -1507,24 +1507,24 @@ func testConcurrentPubsubRecent(t *testing.T) {
 		return nil
 	})
 
-	// g.Go(func() error {
-	// 	for ctx.Err() == nil {
-	// 		_, msgs, err := s.Consume(OffsetOldest, 32)
-	// 		if err != nil {
-	// 			return err
-	// 		}
+	g.Go(func() error {
+		for ctx.Err() == nil {
+			_, msgs, err := s.Consume(OffsetOldest, 32)
+			if err != nil {
+				return err
+			}
 
-	// 		var del = make(map[int64]struct{}, len(msgs))
-	// 		for _, msg := range msgs {
-	// 			del[msg.Offset] = struct{}{}
-	// 		}
-	// 		_, _, err = s.Delete(del)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// 	return nil
-	// })
+			var del = make(map[int64]struct{}, len(msgs))
+			for _, msg := range msgs {
+				del[msg.Offset] = struct{}{}
+			}
+			_, _, err = s.Delete(del)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 
 	err = g.Wait()
 	if serr := kleverr.Get(err); serr != nil {

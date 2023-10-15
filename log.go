@@ -393,7 +393,7 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 
 	var newReaders []*reader
 	for _, r := range l.readers {
-		if r == rdr {
+		if r.segment == rdr.segment {
 			if newReader != nil {
 				newReaders = append(newReaders, newReader)
 			}
