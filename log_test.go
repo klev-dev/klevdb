@@ -199,6 +199,16 @@ func TestBasic(t *testing.T) {
 		require.Nil(t, cmsgs)
 	})
 
+	t.Run("GC", func(t *testing.T) {
+		err := l.GC()
+		require.NoError(t, err)
+
+		coff, cmsgs, err = l.Consume(0, 3)
+		require.NoError(t, err)
+		require.Equal(t, int64(3), coff)
+		require.Equal(t, cmsgs, msgs[0:3])
+	})
+
 	t.Run("Close", func(t *testing.T) {
 		err := l.Close()
 		require.NoError(t, err)

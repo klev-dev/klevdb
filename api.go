@@ -128,6 +128,9 @@ type Log interface {
 	// Sync forces persisting data to the disk
 	Sync() error
 
+	// GC releases any unnecessary resources assciated with this log
+	GC() error
+
 	// Close closes the log
 	Close() error
 }
