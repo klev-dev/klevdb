@@ -91,11 +91,11 @@ func (s Segment) Check(params index.Params) error {
 	case err != nil:
 		return err
 	case len(logIndex) != len(items):
-		return kleverr.Newf("%w: incorrect index size", index.ErrCorrupted)
+		return kleverr.Newf("%s: incorrect index size: %w", s.Index, index.ErrCorrupted)
 	default:
 		for i, item := range logIndex {
 			if item != items[i] {
-				return kleverr.Newf("%w: incorrect index item", index.ErrCorrupted)
+				return kleverr.Newf("%s: incorrect index item: %w", s.Index, index.ErrCorrupted)
 			}
 		}
 	}
