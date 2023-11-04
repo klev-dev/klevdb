@@ -75,7 +75,7 @@ func (s Segment) Check(params index.Params) error {
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return err
+			return kleverr.Newf("%s: %w", s.Log, err)
 		}
 
 		item := params.NewItem(msg, position, indexTime)
