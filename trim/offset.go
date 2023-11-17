@@ -7,16 +7,16 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
-// ByOffset tries to remove the messages at the start of the log before offset
-// returns the offsets it deleted and the amount of storage freed
-func ByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct{}, int64, error) {
+// FindByOffset returns a set of offsets for messages that
+// offset is before a given offset
+func FindByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct{}, error) {
 	if before == message.OffsetOldest {
-		return map[int64]struct{}{}, 0, nil
+		return map[int64]struct{}{}, nil
 	}
 
 	maxOffset, err := l.NextOffset()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if before == message.OffsetNewest {
 		before = maxOffset
@@ -24,11 +24,11 @@ func ByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct
 		maxOffset = before
 	}
 
-	var deleteOffsets = map[int64]struct{}{}
+	var offsets = map[int64]struct{}{}
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		offset = nextOffset
 
@@ -36,17 +36,28 @@ func ByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct
 			if msg.Offset >= before {
 				break
 			}
-			deleteOffsets[msg.Offset] = struct{}{}
+			offsets[msg.Offset] = struct{}{}
 		}
 
 		if err := ctx.Err(); err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	return l.Delete(deleteOffsets)
+	return offsets, nil
+}
+
+// ByOffset tries to remove the messages at the start of the log before offset
+//
+// returns the offsets it deleted and the amount of storage freed
+func ByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct{}, int64, error) {
+	offsets, err := FindByOffset(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return l.Delete(offsets)
 }

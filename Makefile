@@ -7,6 +7,10 @@ test:
 test-verbose:
 	go test -cover -v ./...
 
+.PHONY:
+build:
+	go build -v ./...
+
 .PHONY: bench bench-publish bench-consume bench-get bench-multi
 bench:
 	go test -bench=. -benchmem

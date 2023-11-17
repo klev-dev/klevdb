@@ -6,34 +6,34 @@ import (
 	"github.com/klev-dev/klevdb"
 )
 
-// BySize tries to remove messages until log size is less then sz
-// returns the offsets it deleted and the amount of storage freed
-func BySize(ctx context.Context, l klevdb.Log, sz int64) (map[int64]struct{}, int64, error) {
+// FindBySize returns a set of offsets for messages that
+// if deleted will decrease the log size to sz
+func FindBySize(ctx context.Context, l klevdb.Log, sz int64) (map[int64]struct{}, error) {
 	stats, err := l.Stat()
 	switch {
 	case err != nil:
-		return nil, 0, err
+		return nil, err
 	case stats.Size < sz:
-		return nil, 0, nil
+		return nil, nil
 	}
 
 	maxOffset, err := l.NextOffset()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	var deleteOffsets = map[int64]struct{}{}
+	var offsets = map[int64]struct{}{}
 
 	total := stats.Size
 	for offset := klevdb.OffsetOldest; offset < maxOffset && total >= sz; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		offset = nextOffset
 
 		for _, msg := range msgs {
-			deleteOffsets[msg.Offset] = struct{}{}
+			offsets[msg.Offset] = struct{}{}
 			total -= l.Size(msg)
 
 			if total < sz {
@@ -42,13 +42,24 @@ func BySize(ctx context.Context, l klevdb.Log, sz int64) (map[int64]struct{}, in
 		}
 
 		if err := ctx.Err(); err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	return l.Delete(deleteOffsets)
+	return offsets, nil
+}
+
+// BySize tries to remove messages until log size is less then sz
+//
+// returns the offsets it deleted and the amount of storage freed
+func BySize(ctx context.Context, l klevdb.Log, sz int64) (map[int64]struct{}, int64, error) {
+	offsets, err := FindBySize(ctx, l, sz)
+	if err != nil {
+		return nil, 0, err
+	}
+	return l.Delete(offsets)
 }
