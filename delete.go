@@ -2,7 +2,8 @@ package klevdb
 
 import (
 	"context"
-	"maps"
+
+	"golang.org/x/exp/maps"
 )
 
 type DeleteMultiBackoff func(context.Context) error
