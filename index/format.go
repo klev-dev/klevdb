@@ -1,7 +1,6 @@
 package index
 
 import (
-	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -12,11 +11,10 @@ import (
 var ErrCorrupted = errors.New("index corrupted")
 
 type Writer struct {
-	opts      Params
-	f         *os.File
-	pos       int64
-	buff      []byte
-	keyOffset int
+	opts Index[Item]
+	f    *os.File
+	pos  int64
+	buff []byte
 }
 
 func OpenWriter(path string, opts Params) (*Writer, error) {
@@ -33,10 +31,9 @@ func OpenWriter(path string, opts Params) (*Writer, error) {
 	}
 
 	return &Writer{
-		opts:      opts,
-		f:         f,
-		pos:       pos,
-		keyOffset: opts.keyOffset(),
+		opts: opts,
+		f:    f,
+		pos:  pos,
 	}, nil
 }
 
@@ -45,15 +42,8 @@ func (w *Writer) Write(it Item) error {
 		w.buff = make([]byte, w.opts.Size())
 	}
 
-	binary.BigEndian.PutUint64(w.buff[0:], uint64(it.Offset))
-	binary.BigEndian.PutUint64(w.buff[8:], uint64(it.Position))
-
-	if w.opts.Times {
-		binary.BigEndian.PutUint64(w.buff[16:], uint64(it.Timestamp))
-	}
-
-	if w.opts.Keys {
-		binary.BigEndian.PutUint64(w.buff[w.keyOffset:], it.KeyHash)
+	if err := w.opts.Write(it, w.buff); err != nil {
+		return err
 	}
 
 	if n, err := w.f.Write(w.buff); err != nil {
@@ -109,7 +99,7 @@ func Write(path string, opts Params, index []Item) error {
 	return w.SyncAndClose()
 }
 
-func Read(path string, opts Params) ([]Item, error) {
+func Read(path string, opts Index[Item]) ([]Item, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, kleverr.Newf("could not open index: %w", err)
@@ -132,21 +122,14 @@ func Read(path string, opts Params) ([]Item, error) {
 		return nil, kleverr.Newf("could not read index: %w", err)
 	}
 
-	var keyOffset = opts.keyOffset()
-
 	var items = make([]Item, dataSize/int64(itemSize))
 	for i := range items {
 		pos := i * int(itemSize)
 
-		items[i].Offset = int64(binary.BigEndian.Uint64(data[pos:]))
-		items[i].Position = int64(binary.BigEndian.Uint64(data[pos+8:]))
-
-		if opts.Times {
-			items[i].Timestamp = int64(binary.BigEndian.Uint64(data[pos+16:]))
-		}
-
-		if opts.Keys {
-			items[i].KeyHash = binary.BigEndian.Uint64(data[pos+keyOffset:])
+		if item, err := opts.Read(data[pos:]); err != nil {
+			return nil, kleverr.Newf("could not read index: %w", err)
+		} else {
+			items[i] = item
 		}
 	}
 	return items, nil

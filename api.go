@@ -134,10 +134,7 @@ type Log interface {
 
 // Stat stats a store directory, without opening the store
 func Stat(dir string, opts Options) (Stats, error) {
-	return segment.StatDir(dir, index.Params{
-		Times: opts.TimeIndex,
-		Keys:  opts.KeyIndex,
-	})
+	return segment.StatDir(dir, index.NewParams(opts.TimeIndex, opts.KeyIndex))
 }
 
 // Backup backups a store directory to another location, without opening the store
@@ -147,16 +144,10 @@ func Backup(src, dst string) error {
 
 // Check runs an integrity check, without opening the store
 func Check(dir string, opts Options) error {
-	return segment.CheckDir(dir, index.Params{
-		Times: opts.TimeIndex,
-		Keys:  opts.KeyIndex,
-	})
+	return segment.CheckDir(dir, index.NewParams(opts.TimeIndex, opts.KeyIndex))
 }
 
 // Recover rewrites the storage to include all messages prior the first that fails an integrity check
 func Recover(dir string, opts Options) error {
-	return segment.RecoverDir(dir, index.Params{
-		Times: opts.TimeIndex,
-		Keys:  opts.KeyIndex,
-	})
+	return segment.RecoverDir(dir, index.NewParams(opts.TimeIndex, opts.KeyIndex))
 }

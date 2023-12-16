@@ -15,6 +15,7 @@ import (
 type reader struct {
 	segment segment.Segment
 	params  index.Params
+	keys    bool
 	head    bool
 
 	messages   *message.Reader
@@ -33,25 +34,27 @@ type indexer interface {
 	Len() int
 }
 
-func openReader(seg segment.Segment, params index.Params, head bool) *reader {
+func openReader(seg segment.Segment, params index.Params, keys bool, head bool) *reader {
 	return &reader{
 		segment: seg,
 		params:  params,
+		keys:    keys,
 		head:    head,
 	}
 }
 
-func reopenReader(seg segment.Segment, params index.Params, ix indexer) *reader {
+func reopenReader(seg segment.Segment, params index.Params, keys bool, ix indexer) *reader {
 	return &reader{
 		segment: seg,
 		params:  params,
+		keys:    keys,
 		head:    false,
 
 		index: ix,
 	}
 }
 
-func openReaderAppend(seg segment.Segment, params index.Params, ix indexer) (*reader, error) {
+func openReaderAppend(seg segment.Segment, params index.Params, keys bool, ix indexer) (*reader, error) {
 	messages, err := message.OpenReader(seg.Log)
 	if err != nil {
 		return nil, err
@@ -60,6 +63,7 @@ func openReaderAppend(seg segment.Segment, params index.Params, ix indexer) (*re
 	return &reader{
 		segment: seg,
 		params:  params,
+		keys:    keys,
 		head:    true,
 
 		messages: messages,
@@ -276,7 +280,7 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 			return nil, err
 		}
 
-		return &reader{segment: nseg, params: r.params}, nil
+		return &reader{segment: nseg, params: r.params, keys: r.keys}, nil
 	}
 
 	// the rewritten segment has the same starting offset
@@ -307,7 +311,7 @@ func (r *reader) getIndex() (indexer, error) {
 		return nil, err
 	}
 
-	r.index = newReaderIndex(items, r.params.Keys, r.segment.Offset, r.head)
+	r.index = newReaderIndex(items, r.keys, r.segment.Offset, r.head)
 	return r.index, nil
 }
 

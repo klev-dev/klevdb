@@ -78,7 +78,10 @@ func (s Segment) Check(params index.Params) error {
 			return kleverr.Newf("%s: %w", s.Log, err)
 		}
 
-		item := params.NewItem(msg, position, indexTime)
+		item, err := params.New(msg, position, indexTime)
+		if err != nil {
+			return err
+		}
 		logIndex = append(logIndex, item)
 
 		position = nextPosition
@@ -134,7 +137,10 @@ func (s Segment) Recover(params index.Params) error {
 			return err
 		}
 
-		item := params.NewItem(msg, position, indexTime)
+		item, err := params.New(msg, position, indexTime)
+		if err != nil {
+			return err
+		}
 		logIndex = append(logIndex, item)
 
 		position = nextPosition
@@ -234,7 +240,10 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]inde
 			return nil, err
 		}
 
-		item := params.NewItem(msg, position, indexTime)
+		item, err := params.New(msg, position, indexTime)
+		if err != nil {
+			return nil, err
+		}
 		items = append(items, item)
 
 		position = nextPosition
@@ -379,7 +388,10 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 			}
 			result.SurviveOffsets[msg.Offset] = struct{}{}
 
-			item := params.NewItem(msg, dstPosition, indexTime)
+			item, err := params.New(msg, dstPosition, indexTime)
+			if err != nil {
+				return nil, err
+			}
 			dstItems = append(dstItems, item)
 			indexTime = item.Timestamp
 		}

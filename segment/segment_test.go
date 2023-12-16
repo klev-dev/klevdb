@@ -32,7 +32,7 @@ func clearLastByte(fn string) error {
 }
 
 func TestRecover(t *testing.T) {
-	params := index.Params{Times: true, Keys: true}
+	params := index.NewParams(true, true)
 	msgs := []message.Message{
 		{
 			Offset: 0,
@@ -141,7 +141,7 @@ func TestRecover(t *testing.T) {
 }
 
 func TestBackup(t *testing.T) {
-	params := index.Params{Times: true, Keys: true}
+	params := index.NewParams(true, true)
 	msgs := []message.Message{
 		{
 			Offset: 0,
@@ -221,9 +221,13 @@ func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []messag
 	for _, msg := range msgs {
 		pos, err := lw.Write(msg)
 		require.NoError(t, err)
-		item := params.NewItem(msg, pos, indexTime)
+
+		item, err := params.New(msg, pos, indexTime)
+		require.NoError(t, err)
+
 		err = iw.Write(item)
 		require.NoError(t, err)
+
 		indexTime = item.Timestamp
 	}
 

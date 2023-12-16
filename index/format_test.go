@@ -9,7 +9,7 @@ import (
 
 var indexSz = 10000
 
-var iopts = Params{true, true}
+var iopts = NewParams(true, true)
 
 func createIndex(dir string, itemCount int) (string, error) {
 	var items = make([]Item, itemCount)

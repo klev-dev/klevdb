@@ -13,11 +13,11 @@ func TestRecoverDir(t *testing.T) {
 	t.Run("Missing", func(t *testing.T) {
 		dir := t.TempDir()
 		missing := filepath.Join(dir, "abc")
-		require.NoError(t, RecoverDir(missing, index.Params{}))
+		require.NoError(t, RecoverDir(missing, index.NewParams(false, false)))
 	})
 
 	t.Run("Empty", func(t *testing.T) {
 		dir := t.TempDir()
-		require.NoError(t, RecoverDir(dir, index.Params{}))
+		require.NoError(t, RecoverDir(dir, index.NewParams(false, false)))
 	})
 }
