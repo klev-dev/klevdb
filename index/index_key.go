@@ -33,7 +33,7 @@ type KeyIndex struct {
 	zero struct{}
 }
 
-var _ Index[KeyItem, struct{}] = KeyIndex{}
+var _ Index[KeyItem, struct{}, KeyIndexStore] = KeyIndex{}
 
 func (ix KeyIndex) Size() int64 {
 	return 8 + 8 + 8
@@ -69,4 +69,11 @@ func (ix KeyIndex) Write(o KeyItem, buff []byte) error {
 	binary.BigEndian.PutUint64(buff[16:], o.keyHash)
 
 	return nil
+}
+
+func (ix KeyIndex) NewStore() KeyIndexStore {
+	return KeyIndexStore{}
+}
+
+type KeyIndexStore struct {
 }

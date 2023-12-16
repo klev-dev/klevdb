@@ -10,13 +10,18 @@ type IndexItem interface {
 
 type IndexContext any
 
-type Index[I IndexItem, C IndexContext] interface {
+type Index[I IndexItem, C IndexContext, S IndexStore] interface {
 	Size() int64
 
 	NewContext() C
 	Context(o I) C
-	New(msg message.Message, position int64, ctx C) (I, C, error)
 
+	New(msg message.Message, position int64, ctx C) (I, C, error)
 	Read(buff []byte) (I, error)
 	Write(o I, buff []byte) error
+
+	NewStore() S
+}
+
+type IndexStore interface {
 }

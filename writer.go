@@ -14,35 +14,35 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-type writer[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
-	segment segment.Segment[IX, IT, IC]
+type writer[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore] struct {
+	segment segment.Segment[IX, IT, IC, IS]
 	ix      IX
 	keys    bool
 
 	messages *message.Writer
-	items    *index.Writer[IX, IT, IC]
-	index    *writerIndex[IX, IT, IC]
-	reader   *reader[IX, IT, IC]
+	items    *index.Writer[IX, IT, IC, IS]
+	index    *writerIndex[IX, IT, IC, IS]
+	reader   *reader[IX, IT, IC, IS]
 }
 
-func openWriter[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](seg segment.Segment[IX, IT, IC], ix IX, keys bool, nextContext IC) (*writer[IX, IT, IC], error) {
+func openWriter[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](seg segment.Segment[IX, IT, IC, IS], ix IX, keys bool, nextContext IC) (*writer[IX, IT, IC, IS], error) {
 	messages, err := message.OpenWriter(seg.Log)
 	if err != nil {
 		return nil, err
 	}
 
-	var wix *writerIndex[IX, IT, IC]
+	var wix *writerIndex[IX, IT, IC, IS]
 	if messages.Size() > 0 {
 		indexItems, err := seg.ReindexAndReadIndex(ix)
 		if err != nil {
 			return nil, err
 		}
-		wix = newWriterIndex[IX, IT, IC](ix, indexItems, keys, seg.Offset, nextContext)
+		wix = newWriterIndex(ix, indexItems, keys, seg.Offset, nextContext)
 	} else {
-		wix = newWriterIndex[IX, IT, IC](ix, nil, keys, seg.Offset, nextContext)
+		wix = newWriterIndex[IX, IT, IC, IS](ix, nil, keys, seg.Offset, nextContext)
 	}
 
-	items, err := index.OpenWriter[IX, IT, IC](seg.Index, ix)
+	items, err := index.OpenWriter[IX, IT, IC, IS](seg.Index, ix)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func openWriter[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContex
 		return nil, err
 	}
 
-	return &writer[IX, IT, IC]{
+	return &writer[IX, IT, IC, IS]{
 		segment: seg,
 		ix:      ix,
 		keys:    keys,
@@ -64,15 +64,15 @@ func openWriter[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContex
 	}, nil
 }
 
-func (w *writer[IX, IT, IC]) GetNextOffset() (int64, error) {
+func (w *writer[IX, IT, IC, IS]) GetNextOffset() (int64, error) {
 	return w.index.GetNextOffset()
 }
 
-func (w *writer[IX, IT, IC]) NeedsRollover(rollover int64) bool {
+func (w *writer[IX, IT, IC, IS]) NeedsRollover(rollover int64) bool {
 	return (w.messages.Size() + w.items.Size()) > rollover
 }
 
-func (w *writer[IX, IT, IC]) Publish(msgs []message.Message) (int64, error) {
+func (w *writer[IX, IT, IC, IS]) Publish(msgs []message.Message) (int64, error) {
 	nextOffset, nextTime := w.index.getNext()
 
 	items := make([]IT, len(msgs))
@@ -99,7 +99,7 @@ func (w *writer[IX, IT, IC]) Publish(msgs []message.Message) (int64, error) {
 	return w.index.append(items), nil
 }
 
-func (w *writer[IX, IT, IC]) ReopenReader() (*reader[IX, IT, IC], int64, IC) {
+func (w *writer[IX, IT, IC, IS]) ReopenReader() (*reader[IX, IT, IC, IS], int64, IC) {
 	rdr := reopenReader(w.segment, w.ix, w.keys, w.index.reader())
 	nextOffset, nextContext := w.index.getNext()
 	return rdr, nextOffset, nextContext
@@ -107,7 +107,7 @@ func (w *writer[IX, IT, IC]) ReopenReader() (*reader[IX, IT, IC], int64, IC) {
 
 var errSegmentChanged = errors.New("writing segment changed")
 
-func (w *writer[IX, IT, IC]) Delete(rs *segment.RewriteSegment[IX, IT, IC]) (*writer[IX, IT, IC], *reader[IX, IT, IC], error) {
+func (w *writer[IX, IT, IC, IS]) Delete(rs *segment.RewriteSegment[IX, IT, IC, IS]) (*writer[IX, IT, IC, IS], *reader[IX, IT, IC, IS], error) {
 	if err := w.Sync(); err != nil {
 		return nil, nil, err
 	}
@@ -130,7 +130,7 @@ func (w *writer[IX, IT, IC]) Delete(rs *segment.RewriteSegment[IX, IT, IC]) (*wr
 		}
 
 		nextOffset, nextContext := w.index.getNext()
-		nseg := segment.New[IX, IT, IC](w.segment.Dir, nextOffset)
+		nseg := segment.New[IX, IT, IC, IS](w.segment.Dir, nextOffset)
 		nwrt, err := openWriter(nseg, w.ix, w.keys, nextContext)
 		if err != nil {
 			return nil, nil, err
@@ -181,7 +181,7 @@ func (w *writer[IX, IT, IC]) Delete(rs *segment.RewriteSegment[IX, IT, IC]) (*wr
 	}
 }
 
-func (w *writer[IX, IT, IC]) Sync() error {
+func (w *writer[IX, IT, IC, IS]) Sync() error {
 	if err := w.messages.Sync(); err != nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func (w *writer[IX, IT, IC]) Sync() error {
 	return nil
 }
 
-func (w *writer[IX, IT, IC]) Close() error {
+func (w *writer[IX, IT, IC, IS]) Close() error {
 	if err := w.messages.Close(); err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (w *writer[IX, IT, IC]) Close() error {
 	return w.reader.Close()
 }
 
-type writerIndex[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
+type writerIndex[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore] struct {
 	ix          IX
 	items       []IT
 	keys        art.Tree
@@ -212,14 +212,14 @@ type writerIndex[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexConte
 	mu sync.RWMutex
 }
 
-func newWriterIndex[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](ix IX, items []IT, hasKeys bool, offset int64, context IC) *writerIndex[IX, IT, IC] {
+func newWriterIndex[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](ix IX, items []IT, hasKeys bool, offset int64, context IC) *writerIndex[IX, IT, IC, IS] {
 	var keys art.Tree
 	if hasKeys {
 		keys = art.New()
 		index.AppendKeys(keys, items)
 	}
 
-	wix := &writerIndex[IX, IT, IC]{
+	wix := &writerIndex[IX, IT, IC, IS]{
 		items: items,
 		keys:  keys,
 	}
@@ -236,92 +236,92 @@ func newWriterIndex[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexCo
 	return wix
 }
 
-func (ix *writerIndex[IX, IT, IC]) GetNextOffset() (int64, error) {
-	return ix.nextOffset.Load(), nil
+func (wix *writerIndex[IX, IT, IC, IS]) GetNextOffset() (int64, error) {
+	return wix.nextOffset.Load(), nil
 }
 
-func (ix *writerIndex[IX, IT, IC]) getNext() (int64, IC) {
-	return ix.nextOffset.Load(), ix.nextContext.Load()
+func (wix *writerIndex[IX, IT, IC, IS]) getNext() (int64, IC) {
+	return wix.nextOffset.Load(), wix.nextContext.Load()
 }
 
-func (ix *writerIndex[IX, IT, IC]) getLastOffset() int64 {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
+func (wix *writerIndex[IX, IT, IC, IS]) getLastOffset() int64 {
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
 
-	return ix.items[len(ix.items)-1].Offset()
+	return wix.items[len(wix.items)-1].Offset()
 }
 
-func (ix *writerIndex[IX, IT, IC]) append(items []IT) int64 {
-	ix.mu.Lock()
-	defer ix.mu.Unlock()
+func (wix *writerIndex[IX, IT, IC, IS]) append(items []IT) int64 {
+	wix.mu.Lock()
+	defer wix.mu.Unlock()
 
-	ix.items = append(ix.items, items...)
-	if ix.keys != nil {
-		index.AppendKeys(ix.keys, items)
+	wix.items = append(wix.items, items...)
+	if wix.keys != nil {
+		index.AppendKeys(wix.keys, items)
 	}
 	if ln := len(items); ln > 0 {
-		ix.nextContext.Store(ix.ix.Context(items[ln-1]))
-		ix.nextOffset.Store(items[ln-1].Offset() + 1)
+		wix.nextContext.Store(wix.ix.Context(items[ln-1]))
+		wix.nextOffset.Store(items[ln-1].Offset() + 1)
 	}
-	return ix.nextOffset.Load()
+	return wix.nextOffset.Load()
 }
 
-func (ix *writerIndex[IX, IT, IC]) reader() *readerIndex[IX, IT, IC] {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
+func (wix *writerIndex[IX, IT, IC, IS]) reader() *readerIndex[IX, IT, IC, IS] {
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
 
-	return &readerIndex[IX, IT, IC]{ix.items, ix.keys, ix.nextOffset.Load(), false}
+	return &readerIndex[IX, IT, IC, IS]{wix.items, wix.keys, wix.nextOffset.Load(), false}
 }
 
-func (ix *writerIndex[IX, IT, IC]) Consume(offset int64) (int64, int64, int64, error) {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
+func (wix *writerIndex[IX, IT, IC, IS]) Consume(offset int64) (int64, int64, int64, error) {
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
 
-	position, maxPosition, err := index.Consume(ix.items, offset)
+	position, maxPosition, err := index.Consume(wix.items, offset)
 	if err == index.ErrIndexEmpty {
-		if nextOffset := ix.nextOffset.Load(); offset <= nextOffset {
+		if nextOffset := wix.nextOffset.Load(); offset <= nextOffset {
 			return -1, -1, nextOffset, nil
 		}
 	} else if err == message.ErrInvalidOffset {
-		if nextOffset := ix.nextOffset.Load(); offset == nextOffset {
+		if nextOffset := wix.nextOffset.Load(); offset == nextOffset {
 			return -1, -1, nextOffset, nil
 		}
 	}
 	return position, maxPosition, offset, err
 }
 
-func (ix *writerIndex[IX, IT, IC]) Get(offset int64) (int64, error) {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
+func (wix *writerIndex[IX, IT, IC, IS]) Get(offset int64) (int64, error) {
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
 
-	position, err := index.Get(ix.items, offset)
+	position, err := index.Get(wix.items, offset)
 	if err == message.ErrNotFound {
-		if nextOffset := ix.nextOffset.Load(); offset >= nextOffset {
+		if nextOffset := wix.nextOffset.Load(); offset >= nextOffset {
 			return 0, message.ErrInvalidOffset
 		}
 	}
 	return position, err
 }
 
-func (ix *writerIndex[IX, IT, IC]) Keys(keyHash []byte) ([]int64, error) {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
+func (wix *writerIndex[IX, IT, IC, IS]) Keys(keyHash []byte) ([]int64, error) {
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
 
-	return index.Keys(ix.keys, keyHash)
+	return index.Keys(wix.keys, keyHash)
 }
 
-func (ix *writerIndex[IX, IT, IC]) Time(ts int64) (int64, error) {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
+func (wix *writerIndex[IX, IT, IC, IS]) Time(ts int64) (int64, error) {
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
 
-	return index.Time(ix.items, ts)
+	return index.Time(wix.items, ts)
 }
 
-func (ix *writerIndex[IX, IT, IC]) Len() int {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
+func (wix *writerIndex[IX, IT, IC, IS]) Len() int {
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
 
-	return len(ix.items)
+	return len(wix.items)
 }
 
 type atomicValue[T any] struct {

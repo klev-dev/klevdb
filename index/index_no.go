@@ -28,7 +28,7 @@ type NoIndex struct {
 	zero struct{}
 }
 
-var _ Index[NoItem, struct{}] = NoIndex{}
+var _ Index[NoItem, struct{}, NoIndexStore] = NoIndex{}
 
 func (ix NoIndex) Size() int64 {
 	return 8 + 8
@@ -61,4 +61,11 @@ func (ix NoIndex) Write(o NoItem, buff []byte) error {
 	binary.BigEndian.PutUint64(buff[8:], uint64(o.position))
 
 	return nil
+}
+
+func (ix NoIndex) NewStore() NoIndexStore {
+	return NoIndexStore{}
+}
+
+type NoIndexStore struct {
 }

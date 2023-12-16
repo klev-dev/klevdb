@@ -15,7 +15,7 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-type Segment[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
+type Segment[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore] struct {
 	Dir    string
 	Offset int64
 
@@ -29,8 +29,8 @@ type Stats struct {
 	Size     int64
 }
 
-func New[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir string, offset int64) Segment[IX, IT, IC] {
-	return Segment[IX, IT, IC]{
+func New[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](dir string, offset int64) Segment[IX, IT, IC, IS] {
+	return Segment[IX, IT, IC, IS]{
 		Dir:    dir,
 		Offset: offset,
 
@@ -39,11 +39,11 @@ func New[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir 
 	}
 }
 
-func (s Segment[IX, IT, IC]) GetOffset() int64 {
+func (s Segment[IX, IT, IC, IS]) GetOffset() int64 {
 	return s.Offset
 }
 
-func (s Segment[IX, IT, IC]) Stat(ix IX) (Stats, error) {
+func (s Segment[IX, IT, IC, IS]) Stat(ix IX) (Stats, error) {
 	logStat, err := os.Stat(s.Log)
 	if err != nil {
 		return Stats{}, kleverr.Newf("could not stat log: %w", err)
@@ -61,7 +61,7 @@ func (s Segment[IX, IT, IC]) Stat(ix IX) (Stats, error) {
 	}, nil
 }
 
-func (s Segment[IX, IT, IC]) Check(ix IX) error {
+func (s Segment[IX, IT, IC, IS]) Check(ix IX) error {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (s Segment[IX, IT, IC]) Check(ix IX) error {
 	return nil
 }
 
-func (s Segment[IX, IT, IC]) Recover(ix IX) error {
+func (s Segment[IX, IT, IC, IS]) Recover(ix IX) error {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
 		return err
@@ -197,7 +197,7 @@ func (s Segment[IX, IT, IC]) Recover(ix IX) error {
 	return nil
 }
 
-func (s Segment[IX, IT, IC]) NeedsReindex() (bool, error) {
+func (s Segment[IX, IT, IC, IS]) NeedsReindex() (bool, error) {
 	switch info, err := os.Stat(s.Index); {
 	case os.IsNotExist(err):
 		return true, nil
@@ -210,7 +210,7 @@ func (s Segment[IX, IT, IC]) NeedsReindex() (bool, error) {
 	}
 }
 
-func (s Segment[IX, IT, IC]) ReindexAndReadIndex(ix IX) ([]IT, error) {
+func (s Segment[IX, IT, IC, IS]) ReindexAndReadIndex(ix IX) ([]IT, error) {
 	switch reindex, err := s.NeedsReindex(); {
 	case err != nil:
 		return nil, err
@@ -221,7 +221,7 @@ func (s Segment[IX, IT, IC]) ReindexAndReadIndex(ix IX) ([]IT, error) {
 	}
 }
 
-func (s Segment[IX, IT, IC]) Reindex(ix IX) ([]IT, error) {
+func (s Segment[IX, IT, IC, IS]) Reindex(ix IX) ([]IT, error) {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
 		return nil, err
@@ -231,7 +231,7 @@ func (s Segment[IX, IT, IC]) Reindex(ix IX) ([]IT, error) {
 	return s.ReindexReader(ix, log)
 }
 
-func (s Segment[IX, IT, IC]) ReindexReader(ix IX, log *message.Reader) ([]IT, error) {
+func (s Segment[IX, IT, IC, IS]) ReindexReader(ix IX, log *message.Reader) ([]IT, error) {
 	var position int64
 	var indexCtx = ix.NewContext()
 	var items []IT
@@ -259,7 +259,7 @@ func (s Segment[IX, IT, IC]) ReindexReader(ix IX, log *message.Reader) ([]IT, er
 	return items, nil
 }
 
-func (s Segment[IX, IT, IC]) Backup(targetDir string) error {
+func (s Segment[IX, IT, IC, IS]) Backup(targetDir string) error {
 	logName, err := filepath.Rel(s.Dir, s.Log)
 	if err != nil {
 		return kleverr.Newf("could not rel log: %w", err)
@@ -281,10 +281,10 @@ func (s Segment[IX, IT, IC]) Backup(targetDir string) error {
 	return nil
 }
 
-func (s Segment[IX, IT, IC]) ForRewrite() (Segment[IX, IT, IC], error) {
+func (s Segment[IX, IT, IC, IS]) ForRewrite() (Segment[IX, IT, IC, IS], error) {
 	randStr, err := randStr(8)
 	if err != nil {
-		return Segment[IX, IT, IC]{}, nil
+		return Segment[IX, IT, IC, IS]{}, nil
 	}
 
 	s.Log = fmt.Sprintf("%s.rewrite.%s", s.Log, randStr)
@@ -292,7 +292,7 @@ func (s Segment[IX, IT, IC]) ForRewrite() (Segment[IX, IT, IC], error) {
 	return s, nil
 }
 
-func (olds Segment[IX, IT, IC]) Rename(news Segment[IX, IT, IC]) error {
+func (olds Segment[IX, IT, IC, IS]) Rename(news Segment[IX, IT, IC, IS]) error {
 	if err := os.Rename(olds.Log, news.Log); err != nil {
 		return kleverr.Newf("could not rename log: %w", err)
 	}
@@ -304,7 +304,7 @@ func (olds Segment[IX, IT, IC]) Rename(news Segment[IX, IT, IC]) error {
 	return nil
 }
 
-func (olds Segment[IX, IT, IC]) Override(news Segment[IX, IT, IC]) error {
+func (olds Segment[IX, IT, IC, IS]) Override(news Segment[IX, IT, IC, IS]) error {
 	// remove index segment so we don't have invalid index
 	if err := os.Remove(news.Index); err != nil {
 		return kleverr.Newf("could not delete index: %w", err)
@@ -321,7 +321,7 @@ func (olds Segment[IX, IT, IC]) Override(news Segment[IX, IT, IC]) error {
 	return nil
 }
 
-func (s Segment[IX, IT, IC]) Remove() error {
+func (s Segment[IX, IT, IC, IS]) Remove() error {
 	if err := os.Remove(s.Index); err != nil {
 		return kleverr.Newf("could not delete index: %w", err)
 	}
@@ -331,8 +331,8 @@ func (s Segment[IX, IT, IC]) Remove() error {
 	return nil
 }
 
-type RewriteSegment[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
-	Segment Segment[IX, IT, IC]
+type RewriteSegment[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore] struct {
+	Segment Segment[IX, IT, IC, IS]
 	Stats   Stats
 
 	SurviveOffsets map[int64]struct{}
@@ -340,20 +340,20 @@ type RewriteSegment[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexCo
 	DeletedSize    int64
 }
 
-func (r *RewriteSegment[IX, IT, IC]) GetNewSegment() Segment[IX, IT, IC] {
+func (r *RewriteSegment[IX, IT, IC, IS]) GetNewSegment() Segment[IX, IT, IC, IS] {
 	orderedOffsets := maps.Keys(r.SurviveOffsets)
 	slices.Sort(orderedOffsets)
 	lowestOffset := orderedOffsets[0]
 	return New[IX, IT](r.Segment.Dir, lowestOffset)
 }
 
-func (src Segment[IX, IT, IC]) Rewrite(dropOffsets map[int64]struct{}, ix IX) (*RewriteSegment[IX, IT, IC], error) {
+func (src Segment[IX, IT, IC, IS]) Rewrite(dropOffsets map[int64]struct{}, ix IX) (*RewriteSegment[IX, IT, IC, IS], error) {
 	dst, err := src.ForRewrite()
 	if err != nil {
 		return nil, err
 	}
 
-	result := &RewriteSegment[IX, IT, IC]{Segment: dst}
+	result := &RewriteSegment[IX, IT, IC, IS]{Segment: dst}
 
 	srcLog, err := message.OpenReader(src.Log)
 	if err != nil {

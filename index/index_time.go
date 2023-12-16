@@ -32,7 +32,7 @@ func (o TimeItem) Equal(other IndexItem) bool {
 type TimeIndex struct {
 }
 
-var _ Index[TimeItem, int64] = TimeIndex{}
+var _ Index[TimeItem, int64, TimeIndexStore] = TimeIndex{}
 
 func (ix TimeIndex) Size() int64 {
 	return 8 + 8 + 8
@@ -74,4 +74,11 @@ func (ix TimeIndex) Write(o TimeItem, buff []byte) error {
 	binary.BigEndian.PutUint64(buff[16:], uint64(o.timestamp))
 
 	return nil
+}
+
+func (ix TimeIndex) NewStore() TimeIndexStore {
+	return TimeIndexStore{}
+}
+
+type TimeIndexStore struct {
 }
