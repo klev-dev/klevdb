@@ -15,17 +15,17 @@ import (
 )
 
 type writer struct {
-	segment segment.Segment[index.Params, index.Item]
+	segment segment.Segment[index.Params, index.Item, int64]
 	params  index.Params
 	keys    bool
 
 	messages *message.Writer
-	items    *index.Writer[index.Params, index.Item]
+	items    *index.Writer[index.Params, index.Item, int64]
 	index    *writerIndex
 	reader   *reader
 }
 
-func openWriter(seg segment.Segment[index.Params, index.Item], params index.Params, keys bool, nextTime int64) (*writer, error) {
+func openWriter(seg segment.Segment[index.Params, index.Item, int64], params index.Params, keys bool, nextTime int64) (*writer, error) {
 	messages, err := message.OpenWriter(seg.Log)
 	if err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ func (w *writer) NeedsRollover(rollover int64) bool {
 }
 
 func (w *writer) Publish(msgs []message.Message) (int64, error) {
-	nextOffset, indexTime := w.index.getNext()
+	nextOffset, nextTime := w.index.getNext()
 
 	items := make([]index.Item, len(msgs))
 	for i := range msgs {
@@ -87,14 +87,13 @@ func (w *writer) Publish(msgs []message.Message) (int64, error) {
 			return OffsetInvalid, err
 		}
 
-		items[i], err = w.params.New(msgs[i], position, indexTime)
+		items[i], nextTime, err = w.params.New(msgs[i], position, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}
 		if err := w.items.Write(items[i]); err != nil {
 			return OffsetInvalid, err
 		}
-		indexTime = items[i].Timestamp()
 	}
 
 	return w.index.append(items), nil
@@ -108,7 +107,7 @@ func (w *writer) ReopenReader() (*reader, int64, int64) {
 
 var errSegmentChanged = errors.New("writing segment changed")
 
-func (w *writer) Delete(rs *segment.RewriteSegment[index.Params, index.Item]) (*writer, *reader, error) {
+func (w *writer) Delete(rs *segment.RewriteSegment[index.Params, index.Item, int64]) (*writer, *reader, error) {
 	if err := w.Sync(); err != nil {
 		return nil, nil, err
 	}

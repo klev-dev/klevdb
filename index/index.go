@@ -42,7 +42,7 @@ type Params struct {
 	keyOffset int
 }
 
-var _ Index[Item] = Params{}
+var _ Index[Item, int64] = Params{}
 
 func NewParams(times bool, keys bool) Params {
 	keyOffset := 8 + 8
@@ -67,14 +67,18 @@ func (p Params) Size() int64 {
 	return sz
 }
 
-func (p Params) New(m message.Message, position int64, prevts int64) (Item, error) {
+func (p Params) NewContext() int64 {
+	return 0
+}
+
+func (p Params) New(m message.Message, position int64, ts int64) (Item, int64, error) {
 	it := Item{offset: m.Offset, position: position}
 
 	if p.times {
 		it.timestamp = m.Time.UnixMicro()
 		// guarantee timestamp monotonic increase
-		if it.timestamp < prevts {
-			it.timestamp = prevts
+		if it.timestamp < ts {
+			it.timestamp = ts
 		}
 	}
 
@@ -82,7 +86,7 @@ func (p Params) New(m message.Message, position int64, prevts int64) (Item, erro
 		it.keyHash = KeyHash(m.Key)
 	}
 
-	return it, nil
+	return it, it.timestamp, nil
 }
 
 func (p Params) Read(buff []byte) (Item, error) {

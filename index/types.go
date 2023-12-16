@@ -3,14 +3,17 @@ package index
 import "github.com/klev-dev/klevdb/message"
 
 type IndexItem interface {
-	Timestamp() int64 // TODO get rid of this
 	Equal(other IndexItem) bool
 }
 
-type Index[I IndexItem] interface {
+type IndexContext any
+
+type Index[I IndexItem, C IndexContext] interface {
 	Size() int64
 
-	New(msg message.Message, position int64, prevTs int64) (I, error)
+	NewContext() C
+	New(msg message.Message, position int64, ctx C) (I, C, error)
+
 	Read(buff []byte) (I, error)
 	Write(o I, buff []byte) error
 }

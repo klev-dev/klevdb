@@ -10,14 +10,14 @@ import (
 
 var ErrCorrupted = errors.New("index corrupted")
 
-type Writer[IX Index[IT], IT IndexItem] struct {
+type Writer[IX Index[IT, IC], IT IndexItem, IC IndexContext] struct {
 	ix   IX
 	f    *os.File
 	pos  int64
 	buff []byte
 }
 
-func OpenWriter[IX Index[IT], IT IndexItem](path string, ix IX) (*Writer[IX, IT], error) {
+func OpenWriter[IX Index[IT, IC], IT IndexItem, IC IndexContext](path string, ix IX) (*Writer[IX, IT, IC], error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, kleverr.Newf("could not open index: %w", err)
@@ -30,14 +30,14 @@ func OpenWriter[IX Index[IT], IT IndexItem](path string, ix IX) (*Writer[IX, IT]
 		pos = stat.Size()
 	}
 
-	return &Writer[IX, IT]{
+	return &Writer[IX, IT, IC]{
 		ix:  ix,
 		f:   f,
 		pos: pos,
 	}, nil
 }
 
-func (w *Writer[IX, IT]) Write(it IT) error {
+func (w *Writer[IX, IT, IC]) Write(it IT) error {
 	if w.buff == nil {
 		w.buff = make([]byte, w.ix.Size())
 	}
@@ -55,25 +55,25 @@ func (w *Writer[IX, IT]) Write(it IT) error {
 	return nil
 }
 
-func (w *Writer[IX, IT]) Size() int64 {
+func (w *Writer[IX, IT, IC]) Size() int64 {
 	return w.pos
 }
 
-func (w *Writer[IX, IT]) Sync() error {
+func (w *Writer[IX, IT, IC]) Sync() error {
 	if err := w.f.Sync(); err != nil {
 		return kleverr.Newf("could not sync index: %w", err)
 	}
 	return nil
 }
 
-func (w *Writer[IX, IT]) Close() error {
+func (w *Writer[IX, IT, IC]) Close() error {
 	if err := w.f.Close(); err != nil {
 		return kleverr.Newf("could not close index: %w", err)
 	}
 	return nil
 }
 
-func (w *Writer[IX, IT]) SyncAndClose() error {
+func (w *Writer[IX, IT, IC]) SyncAndClose() error {
 	if err := w.f.Sync(); err != nil {
 		return kleverr.Newf("could not sync index: %w", err)
 	}
@@ -83,7 +83,7 @@ func (w *Writer[IX, IT]) SyncAndClose() error {
 	return nil
 }
 
-func Write[IX Index[IT], IT IndexItem](path string, ix IX, items []IT) error {
+func Write[IX Index[IT, IC], IT IndexItem, IC IndexContext](path string, ix IX, items []IT) error {
 	w, err := OpenWriter(path, ix)
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func Write[IX Index[IT], IT IndexItem](path string, ix IX, items []IT) error {
 	return w.SyncAndClose()
 }
 
-func Read[IX Index[IT], IT IndexItem](path string, ix IX) ([]IT, error) {
+func Read[IX Index[IT, IC], IT IndexItem, IC IndexContext](path string, ix IX) ([]IT, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, kleverr.Newf("could not open index: %w", err)

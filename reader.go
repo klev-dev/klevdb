@@ -13,7 +13,7 @@ import (
 )
 
 type reader struct {
-	segment segment.Segment[index.Params, index.Item]
+	segment segment.Segment[index.Params, index.Item, int64]
 	params  index.Params
 	keys    bool
 	head    bool
@@ -34,7 +34,7 @@ type indexer interface {
 	Len() int
 }
 
-func openReader(seg segment.Segment[index.Params, index.Item], params index.Params, keys bool, head bool) *reader {
+func openReader(seg segment.Segment[index.Params, index.Item, int64], params index.Params, keys bool, head bool) *reader {
 	return &reader{
 		segment: seg,
 		params:  params,
@@ -43,7 +43,7 @@ func openReader(seg segment.Segment[index.Params, index.Item], params index.Para
 	}
 }
 
-func reopenReader(seg segment.Segment[index.Params, index.Item], params index.Params, keys bool, ix indexer) *reader {
+func reopenReader(seg segment.Segment[index.Params, index.Item, int64], params index.Params, keys bool, ix indexer) *reader {
 	return &reader{
 		segment: seg,
 		params:  params,
@@ -54,7 +54,7 @@ func reopenReader(seg segment.Segment[index.Params, index.Item], params index.Pa
 	}
 }
 
-func openReaderAppend(seg segment.Segment[index.Params, index.Item], params index.Params, keys bool, ix indexer) (*reader, error) {
+func openReaderAppend(seg segment.Segment[index.Params, index.Item, int64], params index.Params, keys bool, ix indexer) (*reader, error) {
 	messages, err := message.OpenReader(seg.Log)
 	if err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (r *reader) Backup(dir string) error {
 	return r.segment.Backup(dir)
 }
 
-func (r *reader) Delete(rs *segment.RewriteSegment[index.Params, index.Item]) (*reader, error) {
+func (r *reader) Delete(rs *segment.RewriteSegment[index.Params, index.Item, int64]) (*reader, error) {
 	// log already has reader lock exclusively, no need to sync here
 	if err := r.Close(); err != nil {
 		return nil, err

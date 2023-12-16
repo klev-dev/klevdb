@@ -10,13 +10,13 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-func Find[IX index.Index[IT], IT index.IndexItem](dir string) ([]Segment[IX, IT], error) {
+func Find[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir string) ([]Segment[IX, IT, IC], error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, kleverr.Newf("could not list dir: %w", err)
 	}
 
-	var segments []Segment[IX, IT]
+	var segments []Segment[IX, IT, IC]
 	for _, f := range files {
 		if strings.HasSuffix(f.Name(), ".log") {
 			offsetStr := strings.TrimSuffix(f.Name(), ".log")
@@ -33,8 +33,8 @@ func Find[IX index.Index[IT], IT index.IndexItem](dir string) ([]Segment[IX, IT]
 	return segments, nil
 }
 
-func StatDir[IX index.Index[IT], IT index.IndexItem](dir string, ix IX) (Stats, error) {
-	segments, err := Find[IX, IT](dir)
+func StatDir[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir string, ix IX) (Stats, error) {
+	segments, err := Find[IX, IT, IC](dir)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return Stats{}, nil
@@ -44,7 +44,7 @@ func StatDir[IX index.Index[IT], IT index.IndexItem](dir string, ix IX) (Stats, 
 	return Stat(segments, ix)
 }
 
-func Stat[IX index.Index[IT], IT index.IndexItem](segments []Segment[IX, IT], ix IX) (Stats, error) {
+func Stat[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](segments []Segment[IX, IT, IC], ix IX) (Stats, error) {
 	var total = Stats{}
 	for _, seg := range segments {
 		segStat, err := seg.Stat(ix)
@@ -59,8 +59,8 @@ func Stat[IX index.Index[IT], IT index.IndexItem](segments []Segment[IX, IT], ix
 	return total, nil
 }
 
-func CheckDir[IX index.Index[IT], IT index.IndexItem](dir string, ix IX) error {
-	switch segments, err := Find[IX, IT](dir); {
+func CheckDir[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir string, ix IX) error {
+	switch segments, err := Find[IX, IT, IC](dir); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -73,8 +73,8 @@ func CheckDir[IX index.Index[IT], IT index.IndexItem](dir string, ix IX) error {
 	}
 }
 
-func RecoverDir[IX index.Index[IT], IT index.IndexItem](dir string, ix IX) error {
-	switch segments, err := Find[IX, IT](dir); {
+func RecoverDir[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir string, ix IX) error {
+	switch segments, err := Find[IX, IT, IC](dir); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -87,8 +87,8 @@ func RecoverDir[IX index.Index[IT], IT index.IndexItem](dir string, ix IX) error
 	}
 }
 
-func BackupDir[IX index.Index[IT], IT index.IndexItem](dir, target string) error {
-	segments, err := Find[IX, IT](dir)
+func BackupDir[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir, target string) error {
+	segments, err := Find[IX, IT, IC](dir)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
@@ -103,7 +103,7 @@ func BackupDir[IX index.Index[IT], IT index.IndexItem](dir, target string) error
 	return Backup(segments, target)
 }
 
-func Backup[IX index.Index[IT], IT index.IndexItem](segments []Segment[IX, IT], dir string) error {
+func Backup[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](segments []Segment[IX, IT, IC], dir string) error {
 	for _, seg := range segments {
 		if err := seg.Backup(dir); err != nil {
 			return kleverr.Newf("could not backup segment %d: %w", seg.Offset, err)

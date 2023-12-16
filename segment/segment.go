@@ -15,7 +15,7 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-type Segment[IX index.Index[IT], IT index.IndexItem] struct {
+type Segment[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
 	Dir    string
 	Offset int64
 
@@ -29,8 +29,8 @@ type Stats struct {
 	Size     int64
 }
 
-func New[IX index.Index[IT], IT index.IndexItem](dir string, offset int64) Segment[IX, IT] {
-	return Segment[IX, IT]{
+func New[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir string, offset int64) Segment[IX, IT, IC] {
+	return Segment[IX, IT, IC]{
 		Dir:    dir,
 		Offset: offset,
 
@@ -39,11 +39,11 @@ func New[IX index.Index[IT], IT index.IndexItem](dir string, offset int64) Segme
 	}
 }
 
-func (s Segment[IX, IT]) GetOffset() int64 {
+func (s Segment[IX, IT, IC]) GetOffset() int64 {
 	return s.Offset
 }
 
-func (s Segment[IX, IT]) Stat(ix IX) (Stats, error) {
+func (s Segment[IX, IT, IC]) Stat(ix IX) (Stats, error) {
 	logStat, err := os.Stat(s.Log)
 	if err != nil {
 		return Stats{}, kleverr.Newf("could not stat log: %w", err)
@@ -61,14 +61,15 @@ func (s Segment[IX, IT]) Stat(ix IX) (Stats, error) {
 	}, nil
 }
 
-func (s Segment[IX, IT]) Check(ix IX) error {
+func (s Segment[IX, IT, IC]) Check(ix IX) error {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
 		return err
 	}
 	defer log.Close()
 
-	var position, indexTime int64
+	var position int64
+	var indexCtx = ix.NewContext()
 	var logIndex []IT
 	for {
 		msg, nextPosition, err := log.Read(position)
@@ -78,14 +79,14 @@ func (s Segment[IX, IT]) Check(ix IX) error {
 			return kleverr.Newf("%s: %w", s.Log, err)
 		}
 
-		item, err := ix.New(msg, position, indexTime)
+		item, nextContext, err := ix.New(msg, position, indexCtx)
 		if err != nil {
 			return err
 		}
 		logIndex = append(logIndex, item)
 
 		position = nextPosition
-		indexTime = item.Timestamp()
+		indexCtx = nextContext
 	}
 
 	switch items, err := index.Read(s.Index, ix); {
@@ -106,7 +107,7 @@ func (s Segment[IX, IT]) Check(ix IX) error {
 	return nil
 }
 
-func (s Segment[IX, IT]) Recover(ix IX) error {
+func (s Segment[IX, IT, IC]) Recover(ix IX) error {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
 		return err
@@ -119,8 +120,9 @@ func (s Segment[IX, IT]) Recover(ix IX) error {
 	}
 	defer restore.Close()
 
-	var position, indexTime int64
+	var position int64
 	var corrupted = false
+	var indexCtx = ix.NewContext()
 	var logIndex []IT
 	for {
 		msg, nextPosition, err := log.Read(position)
@@ -137,14 +139,14 @@ func (s Segment[IX, IT]) Recover(ix IX) error {
 			return err
 		}
 
-		item, err := ix.New(msg, position, indexTime)
+		item, nextContext, err := ix.New(msg, position, indexCtx)
 		if err != nil {
 			return err
 		}
 		logIndex = append(logIndex, item)
 
 		position = nextPosition
-		indexTime = item.Timestamp()
+		indexCtx = nextContext
 	}
 
 	if err := log.Close(); err != nil {
@@ -195,7 +197,7 @@ func (s Segment[IX, IT]) Recover(ix IX) error {
 	return nil
 }
 
-func (s Segment[IX, IT]) NeedsReindex() (bool, error) {
+func (s Segment[IX, IT, IC]) NeedsReindex() (bool, error) {
 	switch info, err := os.Stat(s.Index); {
 	case os.IsNotExist(err):
 		return true, nil
@@ -208,7 +210,7 @@ func (s Segment[IX, IT]) NeedsReindex() (bool, error) {
 	}
 }
 
-func (s Segment[IX, IT]) ReindexAndReadIndex(ix IX) ([]IT, error) {
+func (s Segment[IX, IT, IC]) ReindexAndReadIndex(ix IX) ([]IT, error) {
 	switch reindex, err := s.NeedsReindex(); {
 	case err != nil:
 		return nil, err
@@ -219,7 +221,7 @@ func (s Segment[IX, IT]) ReindexAndReadIndex(ix IX) ([]IT, error) {
 	}
 }
 
-func (s Segment[IX, IT]) Reindex(ix IX) ([]IT, error) {
+func (s Segment[IX, IT, IC]) Reindex(ix IX) ([]IT, error) {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
 		return nil, err
@@ -229,8 +231,9 @@ func (s Segment[IX, IT]) Reindex(ix IX) ([]IT, error) {
 	return s.ReindexReader(ix, log)
 }
 
-func (s Segment[IX, IT]) ReindexReader(ix IX, log *message.Reader) ([]IT, error) {
-	var position, indexTime int64
+func (s Segment[IX, IT, IC]) ReindexReader(ix IX, log *message.Reader) ([]IT, error) {
+	var position int64
+	var indexCtx = ix.NewContext()
 	var items []IT
 	for {
 		msg, nextPosition, err := log.Read(position)
@@ -240,14 +243,14 @@ func (s Segment[IX, IT]) ReindexReader(ix IX, log *message.Reader) ([]IT, error)
 			return nil, err
 		}
 
-		item, err := ix.New(msg, position, indexTime)
+		item, nextContext, err := ix.New(msg, position, indexCtx)
 		if err != nil {
 			return nil, err
 		}
 		items = append(items, item)
 
 		position = nextPosition
-		indexTime = item.Timestamp()
+		indexCtx = nextContext
 	}
 
 	if err := index.Write[IX, IT](s.Index, ix, items); err != nil {
@@ -256,7 +259,7 @@ func (s Segment[IX, IT]) ReindexReader(ix IX, log *message.Reader) ([]IT, error)
 	return items, nil
 }
 
-func (s Segment[IX, IT]) Backup(targetDir string) error {
+func (s Segment[IX, IT, IC]) Backup(targetDir string) error {
 	logName, err := filepath.Rel(s.Dir, s.Log)
 	if err != nil {
 		return kleverr.Newf("could not rel log: %w", err)
@@ -278,10 +281,10 @@ func (s Segment[IX, IT]) Backup(targetDir string) error {
 	return nil
 }
 
-func (s Segment[IX, IT]) ForRewrite() (Segment[IX, IT], error) {
+func (s Segment[IX, IT, IC]) ForRewrite() (Segment[IX, IT, IC], error) {
 	randStr, err := randStr(8)
 	if err != nil {
-		return Segment[IX, IT]{}, nil
+		return Segment[IX, IT, IC]{}, nil
 	}
 
 	s.Log = fmt.Sprintf("%s.rewrite.%s", s.Log, randStr)
@@ -289,7 +292,7 @@ func (s Segment[IX, IT]) ForRewrite() (Segment[IX, IT], error) {
 	return s, nil
 }
 
-func (olds Segment[IX, IT]) Rename(news Segment[IX, IT]) error {
+func (olds Segment[IX, IT, IC]) Rename(news Segment[IX, IT, IC]) error {
 	if err := os.Rename(olds.Log, news.Log); err != nil {
 		return kleverr.Newf("could not rename log: %w", err)
 	}
@@ -301,7 +304,7 @@ func (olds Segment[IX, IT]) Rename(news Segment[IX, IT]) error {
 	return nil
 }
 
-func (olds Segment[IX, IT]) Override(news Segment[IX, IT]) error {
+func (olds Segment[IX, IT, IC]) Override(news Segment[IX, IT, IC]) error {
 	// remove index segment so we don't have invalid index
 	if err := os.Remove(news.Index); err != nil {
 		return kleverr.Newf("could not delete index: %w", err)
@@ -318,7 +321,7 @@ func (olds Segment[IX, IT]) Override(news Segment[IX, IT]) error {
 	return nil
 }
 
-func (s Segment[IX, IT]) Remove() error {
+func (s Segment[IX, IT, IC]) Remove() error {
 	if err := os.Remove(s.Index); err != nil {
 		return kleverr.Newf("could not delete index: %w", err)
 	}
@@ -328,8 +331,8 @@ func (s Segment[IX, IT]) Remove() error {
 	return nil
 }
 
-type RewriteSegment[IX index.Index[IT], IT index.IndexItem] struct {
-	Segment Segment[IX, IT]
+type RewriteSegment[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
+	Segment Segment[IX, IT, IC]
 	Stats   Stats
 
 	SurviveOffsets map[int64]struct{}
@@ -337,20 +340,20 @@ type RewriteSegment[IX index.Index[IT], IT index.IndexItem] struct {
 	DeletedSize    int64
 }
 
-func (r *RewriteSegment[IX, IT]) GetNewSegment() Segment[IX, IT] {
+func (r *RewriteSegment[IX, IT, IC]) GetNewSegment() Segment[IX, IT, IC] {
 	orderedOffsets := maps.Keys(r.SurviveOffsets)
 	slices.Sort(orderedOffsets)
 	lowestOffset := orderedOffsets[0]
 	return New[IX, IT](r.Segment.Dir, lowestOffset)
 }
 
-func (src Segment[IX, IT]) Rewrite(dropOffsets map[int64]struct{}, ix IX) (*RewriteSegment[IX, IT], error) {
+func (src Segment[IX, IT, IC]) Rewrite(dropOffsets map[int64]struct{}, ix IX) (*RewriteSegment[IX, IT, IC], error) {
 	dst, err := src.ForRewrite()
 	if err != nil {
 		return nil, err
 	}
 
-	result := &RewriteSegment[IX, IT]{Segment: dst}
+	result := &RewriteSegment[IX, IT, IC]{Segment: dst}
 
 	srcLog, err := message.OpenReader(src.Log)
 	if err != nil {
@@ -367,7 +370,8 @@ func (src Segment[IX, IT]) Rewrite(dropOffsets map[int64]struct{}, ix IX) (*Rewr
 	result.SurviveOffsets = map[int64]struct{}{}
 	result.DeletedOffsets = map[int64]struct{}{}
 
-	var srcPosition, indexTime int64
+	var srcPosition int64
+	var indexCtx = ix.NewContext()
 	var dstItems []IT
 	for {
 		msg, nextSrcPosition, err := srcLog.Read(srcPosition)
@@ -388,12 +392,12 @@ func (src Segment[IX, IT]) Rewrite(dropOffsets map[int64]struct{}, ix IX) (*Rewr
 			}
 			result.SurviveOffsets[msg.Offset] = struct{}{}
 
-			item, err := ix.New(msg, dstPosition, indexTime)
+			item, nextContext, err := ix.New(msg, dstPosition, indexCtx)
 			if err != nil {
 				return nil, err
 			}
 			dstItems = append(dstItems, item)
-			indexTime = item.Timestamp()
+			indexCtx = nextContext
 		}
 
 		srcPosition = nextSrcPosition
