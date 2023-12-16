@@ -134,20 +134,41 @@ type Log interface {
 
 // Stat stats a store directory, without opening the store
 func Stat(dir string, opts Options) (Stats, error) {
-	return segment.StatDir(dir, index.NewParams(opts.TimeIndex, opts.KeyIndex))
+	if opts.TimeIndex && opts.KeyIndex {
+		return segment.StatDir(dir, index.TimeKeyIndex{})
+	} else if opts.TimeIndex {
+		return segment.StatDir(dir, index.TimeIndex{})
+	} else if opts.KeyIndex {
+		return segment.StatDir(dir, index.KeyIndex{})
+	}
+	return segment.StatDir(dir, index.NoIndex{})
 }
 
 // Backup backups a store directory to another location, without opening the store
 func Backup(src, dst string) error {
-	return segment.BackupDir[index.Params, index.Item](src, dst)
+	return segment.BackupDir[index.NoIndex](src, dst)
 }
 
 // Check runs an integrity check, without opening the store
 func Check(dir string, opts Options) error {
-	return segment.CheckDir(dir, index.NewParams(opts.TimeIndex, opts.KeyIndex))
+	if opts.TimeIndex && opts.KeyIndex {
+		return segment.CheckDir(dir, index.TimeKeyIndex{})
+	} else if opts.TimeIndex {
+		return segment.CheckDir(dir, index.TimeIndex{})
+	} else if opts.KeyIndex {
+		return segment.CheckDir(dir, index.KeyIndex{})
+	}
+	return segment.CheckDir(dir, index.NoIndex{})
 }
 
 // Recover rewrites the storage to include all messages prior the first that fails an integrity check
 func Recover(dir string, opts Options) error {
-	return segment.RecoverDir(dir, index.NewParams(opts.TimeIndex, opts.KeyIndex))
+	if opts.TimeIndex && opts.KeyIndex {
+		return segment.RecoverDir(dir, index.TimeKeyIndex{})
+	} else if opts.TimeIndex {
+		return segment.RecoverDir(dir, index.TimeIndex{})
+	} else if opts.KeyIndex {
+		return segment.RecoverDir(dir, index.KeyIndex{})
+	}
+	return segment.RecoverDir(dir, index.NoIndex{})
 }

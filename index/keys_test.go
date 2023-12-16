@@ -17,10 +17,10 @@ func TestKeys(t *testing.T) {
 	})
 
 	t.Run("Single", func(t *testing.T) {
-		item := Item{position: 1, keyHash: 123}
+		item := KeyItem{position: 1, keyHash: 123}
 
 		keys := art.New()
-		AppendKeys(keys, []Item{item})
+		AppendKeys(keys, []KeyItem{item})
 
 		pos, err := Keys(keys, KeyHashEncoded(item.keyHash))
 		require.NoError(t, err)
@@ -32,12 +32,12 @@ func TestKeys(t *testing.T) {
 	})
 
 	t.Run("Duplicate", func(t *testing.T) {
-		item1 := Item{position: 1, keyHash: 123}
-		item2 := Item{position: 2, keyHash: 123}
-		item3 := Item{position: 3, keyHash: 213}
+		item1 := KeyItem{position: 1, keyHash: 123}
+		item2 := KeyItem{position: 2, keyHash: 123}
+		item3 := KeyItem{position: 3, keyHash: 213}
 
 		keys := art.New()
-		AppendKeys(keys, []Item{item1, item2, item3})
+		AppendKeys(keys, []KeyItem{item1, item2, item3})
 
 		pos, err := Keys(keys, KeyHashEncoded(item1.keyHash))
 		require.NoError(t, err)

@@ -9,10 +9,8 @@ import (
 
 var indexSz = 10000
 
-var iopts = NewParams(true, true)
-
 func createIndex(dir string, itemCount int) (string, error) {
-	var items = make([]Item, itemCount)
+	var items = make([]TimeKeyItem, itemCount)
 	for i := range items {
 		items[i].offset = int64(i)
 		items[i].position = int64(i)
@@ -20,7 +18,7 @@ func createIndex(dir string, itemCount int) (string, error) {
 		items[i].keyHash = uint64(i)
 	}
 	filename := filepath.Join(dir, "index")
-	return filename, Write(filename, iopts, items)
+	return filename, Write(filename, TimeKeyIndex{}, items)
 }
 
 func TestWriteRead(t *testing.T) {
@@ -29,7 +27,7 @@ func TestWriteRead(t *testing.T) {
 	filename, err := createIndex(dir, indexSz)
 	require.NoError(t, err)
 
-	items, err := Read(filename, iopts)
+	items, err := Read(filename, TimeKeyIndex{})
 	require.NoError(t, err)
 	require.Len(t, items, indexSz)
 

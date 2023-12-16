@@ -19,6 +19,17 @@ import (
 
 // Open create a log based on a dir and set of options
 func Open(dir string, opts Options) (Log, error) {
+	if opts.TimeIndex && opts.KeyIndex {
+		return open(dir, opts, index.TimeKeyIndex{})
+	} else if opts.TimeIndex {
+		return open(dir, opts, index.TimeIndex{})
+	} else if opts.KeyIndex {
+		return open(dir, opts, index.KeyIndex{})
+	}
+	return open(dir, opts, index.NoIndex{})
+}
+
+func open[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](dir string, opts Options, ix IX) (Log, error) {
 	if opts.Rollover == 0 {
 		opts.Rollover = 1024 * 1024
 	}
@@ -46,51 +57,49 @@ func Open(dir string, opts Options) (Log, error) {
 		}
 	}
 
-	params := index.NewParams(opts.TimeIndex, opts.KeyIndex)
-
-	l := &log{
-		dir:    dir,
-		opts:   opts,
-		params: params,
-		lock:   lock,
+	l := &log[IX, IT, IC]{
+		dir:  dir,
+		opts: opts,
+		ix:   ix,
+		lock: lock,
 	}
 
-	segments, err := segment.Find[index.Params, index.Item](dir)
+	segments, err := segment.Find[IX, IT, IC](dir)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(segments) == 0 {
 		if opts.Readonly {
-			ix := newReaderIndex(nil, opts.KeyIndex, 0, true)
-			rdr := reopenReader(segment.New[index.Params, index.Item](dir, 0), params, opts.KeyIndex, ix)
-			l.readers = []*reader{rdr}
+			rix := newReaderIndex[IX](nil, opts.KeyIndex, 0, true)
+			rdr := reopenReader(segment.New[IX, IT, IC](dir, 0), ix, opts.KeyIndex, rix)
+			l.readers = []*reader[IX, IT, IC]{rdr}
 		} else {
-			w, err := openWriter(segment.New[index.Params, index.Item](dir, 0), params, opts.KeyIndex, 0)
+			w, err := openWriter(segment.New[IX, IT, IC](dir, 0), ix, opts.KeyIndex, ix.NewContext())
 			if err != nil {
 				return nil, err
 			}
 			l.writer = w
-			l.readers = []*reader{w.reader}
+			l.readers = []*reader[IX, IT, IC]{w.reader}
 		}
 	} else {
 		head := segments[len(segments)-1]
 		if opts.Check {
-			if err := head.Check(params); err != nil {
+			if err := head.Check(ix); err != nil {
 				return nil, err
 			}
 		}
 
 		for _, seg := range segments[:len(segments)-1] {
-			rdr := openReader(seg, params, opts.KeyIndex, false)
+			rdr := openReader(seg, ix, opts.KeyIndex, false)
 			l.readers = append(l.readers, rdr)
 		}
 
 		if opts.Readonly {
-			rdr := openReader(head, params, opts.KeyIndex, true)
+			rdr := openReader(head, ix, opts.KeyIndex, true)
 			l.readers = append(l.readers, rdr)
 		} else {
-			wrt, err := openWriter(head, params, opts.KeyIndex, 0)
+			wrt, err := openWriter(head, ix, opts.KeyIndex, ix.NewContext())
 			if err != nil {
 				return nil, err
 			}
@@ -102,22 +111,22 @@ func Open(dir string, opts Options) (Log, error) {
 	return l, nil
 }
 
-type log struct {
-	dir    string
-	opts   Options
-	params index.Params
-	lock   *flock.Flock
+type log[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
+	dir  string
+	opts Options
+	ix   IX
+	lock *flock.Flock
 
-	writer   *writer
+	writer   *writer[IX, IT, IC]
 	writerMu sync.Mutex
 
-	readers   []*reader
+	readers   []*reader[IX, IT, IC]
 	readersMu sync.RWMutex
 
 	deleteMu sync.Mutex
 }
 
-func (l *log) Publish(msgs []message.Message) (int64, error) {
+func (l *log[IX, IT, IC]) Publish(msgs []message.Message) (int64, error) {
 	if l.opts.Readonly {
 		return OffsetInvalid, ErrReadonly
 	}
@@ -132,7 +141,7 @@ func (l *log) Publish(msgs []message.Message) (int64, error) {
 		}
 
 		oldReader, nextOffset, nextTime := l.writer.ReopenReader()
-		newWriter, err := openWriter(segment.New[index.Params, index.Item](l.dir, nextOffset), l.params, l.opts.KeyIndex, nextTime)
+		newWriter, err := openWriter(segment.New[IX, IT, IC](l.dir, nextOffset), l.ix, l.opts.KeyIndex, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}
@@ -164,7 +173,7 @@ func (l *log) Publish(msgs []message.Message) (int64, error) {
 	return nextOffset, nil
 }
 
-func (l *log) NextOffset() (int64, error) {
+func (l *log[IX, IT, IC]) NextOffset() (int64, error) {
 	if l.opts.Readonly {
 		l.readersMu.RLock()
 		defer l.readersMu.RUnlock()
@@ -179,7 +188,7 @@ func (l *log) NextOffset() (int64, error) {
 	return l.writer.GetNextOffset()
 }
 
-func (l *log) Consume(offset int64, maxCount int64) (int64, []message.Message, error) {
+func (l *log[IX, IT, IC]) Consume(offset int64, maxCount int64) (int64, []message.Message, error) {
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
@@ -197,7 +206,7 @@ func (l *log) Consume(offset int64, maxCount int64) (int64, []message.Message, e
 	return nextOffset, msgs, err
 }
 
-func (l *log) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []message.Message, error) {
+func (l *log[IX, IT, IC]) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []message.Message, error) {
 	if !l.opts.KeyIndex {
 		return OffsetInvalid, nil, kleverr.Newf("%w by key", ErrNoIndex)
 	}
@@ -226,7 +235,7 @@ func (l *log) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []m
 	}
 }
 
-func (l *log) Get(offset int64) (message.Message, error) {
+func (l *log[IX, IT, IC]) Get(offset int64) (message.Message, error) {
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
@@ -238,7 +247,7 @@ func (l *log) Get(offset int64) (message.Message, error) {
 	return rdr.Get(offset)
 }
 
-func (l *log) GetByKey(key []byte) (message.Message, error) {
+func (l *log[IX, IT, IC]) GetByKey(key []byte) (message.Message, error) {
 	if !l.opts.KeyIndex {
 		return message.Invalid, kleverr.Newf("%w by key", ErrNoIndex)
 	}
@@ -265,7 +274,7 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 	return message.Invalid, kleverr.Newf("key %w", message.ErrNotFound)
 }
 
-func (l *log) OffsetByKey(key []byte) (int64, error) {
+func (l *log[IX, IT, IC]) OffsetByKey(key []byte) (int64, error) {
 	msg, err := l.GetByKey(key)
 	if err != nil {
 		return OffsetInvalid, err
@@ -273,7 +282,7 @@ func (l *log) OffsetByKey(key []byte) (int64, error) {
 	return msg.Offset, nil
 }
 
-func (l *log) GetByTime(start time.Time) (message.Message, error) {
+func (l *log[IX, IT, IC]) GetByTime(start time.Time) (message.Message, error) {
 	if !l.opts.TimeIndex {
 		return message.Invalid, kleverr.Newf("%w by time", ErrNoIndex)
 	}
@@ -310,7 +319,7 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 	return message.Invalid, kleverr.Newf("time %w", message.ErrNotFound)
 }
 
-func (l *log) OffsetByTime(start time.Time) (int64, time.Time, error) {
+func (l *log[IX, IT, IC]) OffsetByTime(start time.Time) (int64, time.Time, error) {
 	msg, err := l.GetByTime(start)
 	if err != nil {
 		return OffsetInvalid, time.Time{}, err
@@ -318,7 +327,7 @@ func (l *log) OffsetByTime(start time.Time) (int64, time.Time, error) {
 	return msg.Offset, msg.Time, nil
 }
 
-func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, error) {
+func (l *log[IX, IT, IC]) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, error) {
 	if l.opts.Readonly {
 		return nil, 0, ErrReadonly
 	}
@@ -344,7 +353,7 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	}
 	l.writerMu.Unlock()
 
-	rs, err := rdr.segment.Rewrite(offsets, l.params)
+	rs, err := rdr.segment.Rewrite(offsets, l.ix)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -391,7 +400,7 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 		return nil, 0, err
 	}
 
-	var newReaders []*reader
+	var newReaders []*reader[IX, IT, IC]
 	for _, r := range l.readers {
 		if r.segment == rdr.segment {
 			if newReader != nil {
@@ -406,7 +415,7 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	return rs.DeletedOffsets, rs.DeletedSize, nil
 }
 
-func (l *log) findDeleteReader(offsets map[int64]struct{}) (*reader, error) {
+func (l *log[IX, IT, IC]) findDeleteReader(offsets map[int64]struct{}) (*reader[IX, IT, IC], error) {
 	orderedOffsets := maps.Keys(offsets)
 	slices.Sort(orderedOffsets)
 	lowestOffset := orderedOffsets[0]
@@ -422,11 +431,11 @@ func (l *log) findDeleteReader(offsets map[int64]struct{}) (*reader, error) {
 	return rdr, err
 }
 
-func (l *log) Size(m message.Message) int64 {
-	return message.Size(m) + l.params.Size()
+func (l *log[IX, IT, IC]) Size(m message.Message) int64 {
+	return message.Size(m) + l.ix.Size()
 }
 
-func (l *log) Stat() (segment.Stats, error) {
+func (l *log[IX, IT, IC]) Stat() (segment.Stats, error) {
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
@@ -452,7 +461,7 @@ func (l *log) Stat() (segment.Stats, error) {
 	return stats, nil
 }
 
-func (l *log) Backup(dir string) error {
+func (l *log[IX, IT, IC]) Backup(dir string) error {
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
@@ -473,7 +482,7 @@ func (l *log) Backup(dir string) error {
 	return nil
 }
 
-func (l *log) Sync() error {
+func (l *log[IX, IT, IC]) Sync() error {
 	if l.opts.Readonly {
 		return nil
 	}
@@ -484,7 +493,7 @@ func (l *log) Sync() error {
 	return l.writer.Sync()
 }
 
-func (l *log) Close() error {
+func (l *log[IX, IT, IC]) Close() error {
 	if l.opts.Readonly {
 		l.readersMu.Lock()
 		defer l.readersMu.Unlock()

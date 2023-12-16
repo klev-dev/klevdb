@@ -6,7 +6,12 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
-func Time(items []Item, ts int64) (int64, error) {
+type TimeIndexedItem interface {
+	IndexItem
+	Timestamp() int64
+}
+
+func Time[IT TimeIndexedItem](items []IT, ts int64) (int64, error) {
 	if len(items) == 0 {
 		return 0, ErrIndexEmpty
 	}
@@ -14,21 +19,21 @@ func Time(items []Item, ts int64) (int64, error) {
 	beginIndex := 0
 	beginItem := items[beginIndex]
 	switch {
-	case ts < beginItem.timestamp:
+	case ts < beginItem.Timestamp():
 		return 0, message.ErrInvalidOffset
-	case ts == beginItem.timestamp:
-		return beginItem.position, nil
+	case ts == beginItem.Timestamp():
+		return beginItem.Position(), nil
 	}
 
 	endIndex := len(items) - 1
 	endItem := items[endIndex]
 	switch {
-	case endItem.timestamp < ts:
+	case endItem.Timestamp() < ts:
 		return 0, message.ErrNotFound
 	}
 
 	foundIndex := sort.Search(len(items), func(midIndex int) bool {
-		return items[midIndex].timestamp >= ts
+		return items[midIndex].Timestamp() >= ts
 	})
-	return items[foundIndex].position, nil
+	return items[foundIndex].Position(), nil
 }

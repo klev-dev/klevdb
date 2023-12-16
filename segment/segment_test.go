@@ -32,7 +32,7 @@ func clearLastByte(fn string) error {
 }
 
 func TestRecover(t *testing.T) {
-	params := index.NewParams(true, true)
+	ix := index.TimeKeyIndex{}
 	msgs := []message.Message{
 		{
 			Offset: 0,
@@ -51,19 +51,21 @@ func TestRecover(t *testing.T) {
 	var tests = []struct {
 		name    string
 		in      []message.Message
-		corrupt func(s Segment[index.Params, index.Item, int64]) error
+		corrupt func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error
 		out     []message.Message
 	}{
 		{
 			"Ok",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error { return nil },
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
+				return nil
+			},
 			msgs,
 		},
 		{
 			"MessageMissing",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
 				return os.Truncate(s.Log, message.Size(msgs[0]))
 			},
 			msgs[0:1],
@@ -71,7 +73,7 @@ func TestRecover(t *testing.T) {
 		{
 			"MessageShortHeader",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
 				return os.Truncate(s.Log, message.Size(msgs[0])+4)
 			},
 			msgs[0:1],
@@ -79,15 +81,15 @@ func TestRecover(t *testing.T) {
 		{
 			"MessageShortData",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
-				return os.Truncate(s.Log, message.Size(msgs[0])+params.Size()+4)
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
+				return os.Truncate(s.Log, message.Size(msgs[0])+ix.Size()+4)
 			},
 			msgs[0:1],
 		},
 		{
 			"MessageCRC",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
 				return clearLastByte(s.Log)
 			},
 			msgs[0:1],
@@ -95,7 +97,7 @@ func TestRecover(t *testing.T) {
 		{
 			"IndexMissing",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
 				return os.Remove(s.Index)
 			},
 			msgs,
@@ -103,23 +105,23 @@ func TestRecover(t *testing.T) {
 		{
 			"IndexItemMissing",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
-				return os.Truncate(s.Index, params.Size())
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
+				return os.Truncate(s.Index, ix.Size())
 			},
 			msgs,
 		},
 		{
 			"IndexItemPartial",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
-				return os.Truncate(s.Index, params.Size()+4)
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
+				return os.Truncate(s.Index, ix.Size()+4)
 			},
 			msgs,
 		},
 		{
 			"IndexItemWrong",
 			msgs,
-			func(s Segment[index.Params, index.Item, int64]) error {
+			func(s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64]) error {
 				return clearLastByte(s.Index)
 			},
 			msgs,
@@ -128,20 +130,20 @@ func TestRecover(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New[index.Params, index.Item, int64](t.TempDir(), 0)
-			writeMessages(t, seg, params, test.in)
+			seg := New[index.TimeKeyIndex, index.TimeKeyItem, int64](t.TempDir(), 0)
+			writeMessages(t, seg, ix, test.in)
 
 			require.NoError(t, test.corrupt(seg))
 
-			require.NoError(t, seg.Recover(params))
+			require.NoError(t, seg.Recover(ix))
 
-			assertMessages(t, seg, params, test.out)
+			assertMessages(t, seg, ix, test.out)
 		})
 	}
 }
 
 func TestBackup(t *testing.T) {
-	params := index.NewParams(true, true)
+	ix := index.TimeKeyIndex{}
 	msgs := []message.Message{
 		{
 			Offset: 0,
@@ -160,13 +162,13 @@ func TestBackup(t *testing.T) {
 	var tests = []struct {
 		name   string
 		in     []message.Message
-		backup func(t *testing.T, s Segment[index.Params, index.Item, int64], dir string) error
+		backup func(t *testing.T, s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64], dir string) error
 		out    []message.Message
 	}{
 		{
 			name: "Simple",
 			in:   msgs,
-			backup: func(t *testing.T, s Segment[index.Params, index.Item, int64], dir string) error {
+			backup: func(t *testing.T, s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64], dir string) error {
 				return s.Backup(dir)
 			},
 			out: msgs,
@@ -174,7 +176,7 @@ func TestBackup(t *testing.T) {
 		{
 			name: "Repeated",
 			in:   msgs,
-			backup: func(t *testing.T, s Segment[index.Params, index.Item, int64], dir string) error {
+			backup: func(t *testing.T, s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64], dir string) error {
 				if err := s.Backup(dir); err != nil {
 					return err
 				}
@@ -185,12 +187,12 @@ func TestBackup(t *testing.T) {
 		{
 			name: "Incremental",
 			in:   msgs[0:1],
-			backup: func(t *testing.T, s Segment[index.Params, index.Item, int64], dir string) error {
+			backup: func(t *testing.T, s Segment[index.TimeKeyIndex, index.TimeKeyItem, int64], dir string) error {
 				if err := s.Backup(dir); err != nil {
 					return err
 				}
 
-				writeMessages(t, s, params, msgs[1:])
+				writeMessages(t, s, ix, msgs[1:])
 				return s.Backup(dir)
 			},
 			out: msgs,
@@ -199,30 +201,30 @@ func TestBackup(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New[index.Params, index.Item, int64](t.TempDir(), 0)
-			writeMessages(t, seg, params, test.in)
+			seg := New[index.TimeKeyIndex, index.TimeKeyItem, int64](t.TempDir(), 0)
+			writeMessages(t, seg, ix, test.in)
 
 			ndir := t.TempDir()
 			require.NoError(t, test.backup(t, seg, ndir))
 
-			nseg := New[index.Params, index.Item](ndir, 0)
-			assertMessages(t, nseg, params, test.out)
+			nseg := New[index.TimeKeyIndex, index.TimeKeyItem](ndir, 0)
+			assertMessages(t, nseg, ix, test.out)
 		})
 	}
 }
 
-func writeMessages(t *testing.T, seg Segment[index.Params, index.Item, int64], params index.Params, msgs []message.Message) {
+func writeMessages[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](t *testing.T, seg Segment[IX, IT, IC], ix IX, msgs []message.Message) {
 	lw, err := message.OpenWriter(seg.Log)
 	require.NoError(t, err)
-	iw, err := index.OpenWriter(seg.Index, params)
+	iw, err := index.OpenWriter(seg.Index, ix)
 	require.NoError(t, err)
 
-	var indexContext = params.NewContext()
+	var indexContext = ix.NewContext()
 	for _, msg := range msgs {
 		pos, err := lw.Write(msg)
 		require.NoError(t, err)
 
-		item, nextContext, err := params.New(msg, pos, indexContext)
+		item, nextContext, err := ix.New(msg, pos, indexContext)
 		require.NoError(t, err)
 
 		err = iw.Write(item)
@@ -235,8 +237,8 @@ func writeMessages(t *testing.T, seg Segment[index.Params, index.Item, int64], p
 	require.NoError(t, lw.Close())
 }
 
-func assertMessages(t *testing.T, seg Segment[index.Params, index.Item, int64], params index.Params, expMsgs []message.Message) {
-	index, err := seg.ReindexAndReadIndex(params)
+func assertMessages(t *testing.T, seg Segment[index.TimeKeyIndex, index.TimeKeyItem, int64], ix index.TimeKeyIndex, expMsgs []message.Message) {
+	index, err := seg.ReindexAndReadIndex(ix)
 	require.NoError(t, err)
 	require.Len(t, index, len(expMsgs))
 

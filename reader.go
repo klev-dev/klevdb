@@ -12,9 +12,9 @@ import (
 	"github.com/klev-dev/klevdb/segment"
 )
 
-type reader struct {
-	segment segment.Segment[index.Params, index.Item, int64]
-	params  index.Params
+type reader[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
+	segment segment.Segment[IX, IT, IC]
+	ix      IX
 	keys    bool
 	head    bool
 
@@ -34,48 +34,48 @@ type indexer interface {
 	Len() int
 }
 
-func openReader(seg segment.Segment[index.Params, index.Item, int64], params index.Params, keys bool, head bool) *reader {
-	return &reader{
+func openReader[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](seg segment.Segment[IX, IT, IC], ix IX, keys bool, head bool) *reader[IX, IT, IC] {
+	return &reader[IX, IT, IC]{
 		segment: seg,
-		params:  params,
+		ix:      ix,
 		keys:    keys,
 		head:    head,
 	}
 }
 
-func reopenReader(seg segment.Segment[index.Params, index.Item, int64], params index.Params, keys bool, ix indexer) *reader {
-	return &reader{
+func reopenReader[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](seg segment.Segment[IX, IT, IC], ix IX, keys bool, ixr indexer) *reader[IX, IT, IC] {
+	return &reader[IX, IT, IC]{
 		segment: seg,
-		params:  params,
+		ix:      ix,
 		keys:    keys,
 		head:    false,
 
-		index: ix,
+		index: ixr,
 	}
 }
 
-func openReaderAppend(seg segment.Segment[index.Params, index.Item, int64], params index.Params, keys bool, ix indexer) (*reader, error) {
+func openReaderAppend[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](seg segment.Segment[IX, IT, IC], ix IX, keys bool, ixr indexer) (*reader[IX, IT, IC], error) {
 	messages, err := message.OpenReader(seg.Log)
 	if err != nil {
 		return nil, err
 	}
 
-	return &reader{
+	return &reader[IX, IT, IC]{
 		segment: seg,
-		params:  params,
+		ix:      ix,
 		keys:    keys,
 		head:    true,
 
 		messages: messages,
-		index:    ix,
+		index:    ixr,
 	}, nil
 }
 
-func (r *reader) GetOffset() int64 {
+func (r *reader[IX, IT, IC]) GetOffset() int64 {
 	return r.segment.GetOffset()
 }
 
-func (r *reader) GetNextOffset() (int64, error) {
+func (r *reader[IX, IT, IC]) GetNextOffset() (int64, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return 0, err
@@ -83,7 +83,7 @@ func (r *reader) GetNextOffset() (int64, error) {
 	return index.GetNextOffset()
 }
 
-func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, error) {
+func (r *reader[IX, IT, IC]) Consume(offset, maxCount int64) (int64, []message.Message, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return OffsetInvalid, nil, err
@@ -117,7 +117,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 	return msgs[len(msgs)-1].Offset + 1, msgs, nil
 }
 
-func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
+func (r *reader[IX, IT, IC]) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return OffsetInvalid, nil, err
@@ -176,7 +176,7 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	return msgs[len(msgs)-1].Offset + 1, msgs, nil
 }
 
-func (r *reader) Get(offset int64) (message.Message, error) {
+func (r *reader[IX, IT, IC]) Get(offset int64) (message.Message, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return message.Invalid, err
@@ -195,7 +195,7 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 	return messages.Get(position)
 }
 
-func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
+func (r *reader[IX, IT, IC]) GetByKey(key, keyHash []byte) (message.Message, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return message.Invalid, err
@@ -224,7 +224,7 @@ func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
 	return message.Invalid, message.ErrNotFound
 }
 
-func (r *reader) GetByTime(ts int64) (message.Message, error) {
+func (r *reader[IX, IT, IC]) GetByTime(ts int64) (message.Message, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return message.Invalid, err
@@ -243,15 +243,15 @@ func (r *reader) GetByTime(ts int64) (message.Message, error) {
 	return messages.Get(position)
 }
 
-func (r *reader) Stat() (segment.Stats, error) {
-	return r.segment.Stat(r.params)
+func (r *reader[IX, IT, IC]) Stat() (segment.Stats, error) {
+	return r.segment.Stat(r.ix)
 }
 
-func (r *reader) Backup(dir string) error {
+func (r *reader[IX, IT, IC]) Backup(dir string) error {
 	return r.segment.Backup(dir)
 }
 
-func (r *reader) Delete(rs *segment.RewriteSegment[index.Params, index.Item, int64]) (*reader, error) {
+func (r *reader[IX, IT, IC]) Delete(rs *segment.RewriteSegment[IX, IT, IC]) (*reader[IX, IT, IC], error) {
 	// log already has reader lock exclusively, no need to sync here
 	if err := r.Close(); err != nil {
 		return nil, err
@@ -280,7 +280,7 @@ func (r *reader) Delete(rs *segment.RewriteSegment[index.Params, index.Item, int
 			return nil, err
 		}
 
-		return &reader{segment: nseg, params: r.params, keys: r.keys}, nil
+		return &reader[IX, IT, IC]{segment: nseg, ix: r.ix, keys: r.keys}, nil
 	}
 
 	// the rewritten segment has the same starting offset
@@ -291,7 +291,7 @@ func (r *reader) Delete(rs *segment.RewriteSegment[index.Params, index.Item, int
 	return r, nil
 }
 
-func (r *reader) getIndex() (indexer, error) {
+func (r *reader[IX, IT, IC]) getIndex() (indexer, error) {
 	r.indexMu.RLock()
 	if ix := r.index; ix != nil {
 		r.indexMu.RUnlock()
@@ -306,16 +306,16 @@ func (r *reader) getIndex() (indexer, error) {
 		return ix, nil
 	}
 
-	items, err := r.segment.ReindexAndReadIndex(r.params)
+	items, err := r.segment.ReindexAndReadIndex(r.ix)
 	if err != nil {
 		return nil, err
 	}
 
-	r.index = newReaderIndex(items, r.keys, r.segment.Offset, r.head)
+	r.index = newReaderIndex[IX, IT, IC](items, r.keys, r.segment.Offset, r.head)
 	return r.index, nil
 }
 
-func (r *reader) getMessages() (*message.Reader, error) {
+func (r *reader[IX, IT, IC]) getMessages() (*message.Reader, error) {
 	r.messagesMu.RLock()
 	if msgs := r.messages; msgs != nil {
 		r.messagesMu.RUnlock()
@@ -339,7 +339,7 @@ func (r *reader) getMessages() (*message.Reader, error) {
 	return r.messages, nil
 }
 
-func (r *reader) Close() error {
+func (r *reader[IX, IT, IC]) Close() error {
 	r.indexMu.Lock()
 	defer r.indexMu.Unlock()
 
@@ -359,14 +359,14 @@ func (r *reader) Close() error {
 	return nil
 }
 
-type readerIndex struct {
-	items      []index.Item
+type readerIndex[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext] struct {
+	items      []IT
 	keys       art.Tree
 	nextOffset int64
 	head       bool
 }
 
-func newReaderIndex(items []index.Item, hasKeys bool, offset int64, head bool) *readerIndex {
+func newReaderIndex[IX index.Index[IT, IC], IT index.IndexItem, IC index.IndexContext](items []IT, hasKeys bool, offset int64, head bool) *readerIndex[IX, IT, IC] {
 	var keys art.Tree
 	if hasKeys {
 		keys = art.New()
@@ -378,7 +378,7 @@ func newReaderIndex(items []index.Item, hasKeys bool, offset int64, head bool) *
 		nextOffset = items[len(items)-1].Offset() + 1
 	}
 
-	return &readerIndex{
+	return &readerIndex[IX, IT, IC]{
 		items:      items,
 		keys:       keys,
 		nextOffset: nextOffset,
@@ -386,11 +386,11 @@ func newReaderIndex(items []index.Item, hasKeys bool, offset int64, head bool) *
 	}
 }
 
-func (ix *readerIndex) GetNextOffset() (int64, error) {
+func (ix *readerIndex[IX, IT, IC]) GetNextOffset() (int64, error) {
 	return ix.nextOffset, nil
 }
 
-func (ix *readerIndex) Consume(offset int64) (int64, int64, int64, error) {
+func (ix *readerIndex[IX, IT, IC]) Consume(offset int64) (int64, int64, int64, error) {
 	position, maxPosition, err := index.Consume(ix.items, offset)
 	if err != nil && ix.head {
 		switch {
@@ -407,7 +407,7 @@ func (ix *readerIndex) Consume(offset int64) (int64, int64, int64, error) {
 	return position, maxPosition, offset, err
 }
 
-func (ix *readerIndex) Get(offset int64) (int64, error) {
+func (ix *readerIndex[IX, IT, IC]) Get(offset int64) (int64, error) {
 	position, err := index.Get(ix.items, offset)
 	if err == message.ErrNotFound && ix.head && offset >= ix.nextOffset {
 		return -1, message.ErrInvalidOffset
@@ -415,14 +415,14 @@ func (ix *readerIndex) Get(offset int64) (int64, error) {
 	return position, err
 }
 
-func (ix *readerIndex) Keys(keyHash []byte) ([]int64, error) {
+func (ix *readerIndex[IX, IT, IC]) Keys(keyHash []byte) ([]int64, error) {
 	return index.Keys(ix.keys, keyHash)
 }
 
-func (ix *readerIndex) Time(ts int64) (int64, error) {
+func (ix *readerIndex[IX, IT, IC]) Time(ts int64) (int64, error) {
 	return index.Time(ix.items, ts)
 }
 
-func (ix *readerIndex) Len() int {
+func (ix *readerIndex[IX, IT, IC]) Len() int {
 	return len(ix.items)
 }
