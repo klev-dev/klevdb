@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/klev-dev/klevdb/index"
 	"github.com/stretchr/testify/require"
 )
 
-func genSegments(offsets ...int64) []Segment {
-	var segments []Segment
+func genSegments(offsets ...int64) []Segment[index.Params, index.Item] {
+	var segments []Segment[index.Params, index.Item]
 	for _, offset := range offsets {
-		segments = append(segments, New("", offset))
+		segments = append(segments, New[index.Params, index.Item]("", offset))
 	}
 	return segments
 }

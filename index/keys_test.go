@@ -17,14 +17,14 @@ func TestKeys(t *testing.T) {
 	})
 
 	t.Run("Single", func(t *testing.T) {
-		item := Item{Position: 1, KeyHash: 123}
+		item := Item{position: 1, keyHash: 123}
 
 		keys := art.New()
 		AppendKeys(keys, []Item{item})
 
-		pos, err := Keys(keys, KeyHashEncoded(item.KeyHash))
+		pos, err := Keys(keys, KeyHashEncoded(item.keyHash))
 		require.NoError(t, err)
-		require.ElementsMatch(t, []int64{item.Position}, pos)
+		require.ElementsMatch(t, []int64{item.position}, pos)
 
 		pos, err = Keys(keys, KeyHashEncoded(321))
 		require.ErrorIs(t, message.ErrNotFound, err)
@@ -32,20 +32,20 @@ func TestKeys(t *testing.T) {
 	})
 
 	t.Run("Duplicate", func(t *testing.T) {
-		item1 := Item{Position: 1, KeyHash: 123}
-		item2 := Item{Position: 2, KeyHash: 123}
-		item3 := Item{Position: 3, KeyHash: 213}
+		item1 := Item{position: 1, keyHash: 123}
+		item2 := Item{position: 2, keyHash: 123}
+		item3 := Item{position: 3, keyHash: 213}
 
 		keys := art.New()
 		AppendKeys(keys, []Item{item1, item2, item3})
 
-		pos, err := Keys(keys, KeyHashEncoded(item1.KeyHash))
+		pos, err := Keys(keys, KeyHashEncoded(item1.keyHash))
 		require.NoError(t, err)
-		require.ElementsMatch(t, []int64{item1.Position, item2.Position}, pos)
+		require.ElementsMatch(t, []int64{item1.position, item2.position}, pos)
 
-		pos, err = Keys(keys, KeyHashEncoded(item3.KeyHash))
+		pos, err = Keys(keys, KeyHashEncoded(item3.keyHash))
 		require.NoError(t, err)
-		require.ElementsMatch(t, []int64{item3.Position}, pos)
+		require.ElementsMatch(t, []int64{item3.position}, pos)
 
 		pos, err = Keys(keys, KeyHashEncoded(321))
 		require.ErrorIs(t, message.ErrNotFound, err)

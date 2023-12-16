@@ -15,17 +15,17 @@ import (
 )
 
 type writer struct {
-	segment segment.Segment
+	segment segment.Segment[index.Params, index.Item]
 	params  index.Params
 	keys    bool
 
 	messages *message.Writer
-	items    *index.Writer
+	items    *index.Writer[index.Params, index.Item]
 	index    *writerIndex
 	reader   *reader
 }
 
-func openWriter(seg segment.Segment, params index.Params, keys bool, nextTime int64) (*writer, error) {
+func openWriter(seg segment.Segment[index.Params, index.Item], params index.Params, keys bool, nextTime int64) (*writer, error) {
 	messages, err := message.OpenWriter(seg.Log)
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (w *writer) Publish(msgs []message.Message) (int64, error) {
 		if err := w.items.Write(items[i]); err != nil {
 			return OffsetInvalid, err
 		}
-		indexTime = items[i].Timestamp
+		indexTime = items[i].Timestamp()
 	}
 
 	return w.index.append(items), nil
@@ -108,7 +108,7 @@ func (w *writer) ReopenReader() (*reader, int64, int64) {
 
 var errSegmentChanged = errors.New("writing segment changed")
 
-func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
+func (w *writer) Delete(rs *segment.RewriteSegment[index.Params, index.Item]) (*writer, *reader, error) {
 	if err := w.Sync(); err != nil {
 		return nil, nil, err
 	}
@@ -131,7 +131,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		}
 
 		nextOffset, nextTime := w.index.getNext()
-		nseg := segment.New(w.segment.Dir, nextOffset)
+		nseg := segment.New[index.Params, index.Item](w.segment.Dir, nextOffset)
 		nwrt, err := openWriter(nseg, w.params, w.keys, nextTime)
 		if err != nil {
 			return nil, nil, err
@@ -159,7 +159,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		nextOffset, nextTime := w.index.getNext()
 		if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
 			rdr := openReader(nseg, w.params, w.keys, false)
-			wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params, w.keys, nextTime)
+			wrt, err := openWriter(segment.New[index.Params, index.Item](w.segment.Dir, nextOffset), w.params, w.keys, nextTime)
 			return wrt, rdr, err
 		} else {
 			wrt, err := openWriter(nseg, w.params, w.keys, nextTime)
@@ -174,7 +174,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 	nextOffset, nextTime := w.index.getNext()
 	if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
 		rdr := openReader(w.segment, w.params, w.keys, false)
-		wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params, w.keys, nextTime)
+		wrt, err := openWriter(segment.New[index.Params, index.Item](w.segment.Dir, nextOffset), w.params, w.keys, nextTime)
 		return wrt, rdr, err
 	} else {
 		wrt, err := openWriter(w.segment, w.params, w.keys, nextTime)
@@ -227,8 +227,8 @@ func newWriterIndex(items []index.Item, hasKeys bool, offset int64, timestamp in
 	nextOffset := offset
 	nextTime := timestamp
 	if len(items) > 0 {
-		nextOffset = items[len(items)-1].Offset + 1
-		nextTime = items[len(items)-1].Timestamp
+		nextOffset = items[len(items)-1].Offset() + 1
+		nextTime = items[len(items)-1].Timestamp()
 	}
 	ix.nextOffset.Store(nextOffset)
 	ix.nextTime.Store(nextTime)
@@ -248,7 +248,7 @@ func (ix *writerIndex) getLastOffset() int64 {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 
-	return ix.items[len(ix.items)-1].Offset
+	return ix.items[len(ix.items)-1].Offset()
 }
 
 func (ix *writerIndex) append(items []index.Item) int64 {
@@ -260,8 +260,8 @@ func (ix *writerIndex) append(items []index.Item) int64 {
 		index.AppendKeys(ix.keys, items)
 	}
 	if ln := len(items); ln > 0 {
-		ix.nextTime.Store(items[ln-1].Timestamp)
-		ix.nextOffset.Store(items[ln-1].Offset + 1)
+		ix.nextTime.Store(items[ln-1].Timestamp())
+		ix.nextOffset.Store(items[ln-1].Offset() + 1)
 	}
 	return ix.nextOffset.Load()
 }

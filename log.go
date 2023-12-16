@@ -55,7 +55,7 @@ func Open(dir string, opts Options) (Log, error) {
 		lock:   lock,
 	}
 
-	segments, err := segment.Find(dir)
+	segments, err := segment.Find[index.Params, index.Item](dir)
 	if err != nil {
 		return nil, err
 	}
@@ -63,10 +63,10 @@ func Open(dir string, opts Options) (Log, error) {
 	if len(segments) == 0 {
 		if opts.Readonly {
 			ix := newReaderIndex(nil, opts.KeyIndex, 0, true)
-			rdr := reopenReader(segment.New(dir, 0), params, opts.KeyIndex, ix)
+			rdr := reopenReader(segment.New[index.Params, index.Item](dir, 0), params, opts.KeyIndex, ix)
 			l.readers = []*reader{rdr}
 		} else {
-			w, err := openWriter(segment.New(dir, 0), params, opts.KeyIndex, 0)
+			w, err := openWriter(segment.New[index.Params, index.Item](dir, 0), params, opts.KeyIndex, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -132,7 +132,7 @@ func (l *log) Publish(msgs []message.Message) (int64, error) {
 		}
 
 		oldReader, nextOffset, nextTime := l.writer.ReopenReader()
-		newWriter, err := openWriter(segment.New(l.dir, nextOffset), l.params, l.opts.KeyIndex, nextTime)
+		newWriter, err := openWriter(segment.New[index.Params, index.Item](l.dir, nextOffset), l.params, l.opts.KeyIndex, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}

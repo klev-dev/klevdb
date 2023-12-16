@@ -12,8 +12,8 @@ func TestTime(t *testing.T) {
 	gen := func(ts ...int64) []Item {
 		items := make([]Item, len(ts))
 		for i := range items {
-			items[i].Timestamp = ts[i]
-			items[i].Position = int64(i)
+			items[i].timestamp = ts[i]
+			items[i].position = int64(i)
 		}
 		return items
 	}

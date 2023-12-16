@@ -10,14 +10,14 @@ import (
 
 var ErrCorrupted = errors.New("index corrupted")
 
-type Writer struct {
-	opts Index[Item]
+type Writer[IX Index[IT], IT IndexItem] struct {
+	ix   IX
 	f    *os.File
 	pos  int64
 	buff []byte
 }
 
-func OpenWriter(path string, opts Params) (*Writer, error) {
+func OpenWriter[IX Index[IT], IT IndexItem](path string, ix IX) (*Writer[IX, IT], error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, kleverr.Newf("could not open index: %w", err)
@@ -30,19 +30,19 @@ func OpenWriter(path string, opts Params) (*Writer, error) {
 		pos = stat.Size()
 	}
 
-	return &Writer{
-		opts: opts,
-		f:    f,
-		pos:  pos,
+	return &Writer[IX, IT]{
+		ix:  ix,
+		f:   f,
+		pos: pos,
 	}, nil
 }
 
-func (w *Writer) Write(it Item) error {
+func (w *Writer[IX, IT]) Write(it IT) error {
 	if w.buff == nil {
-		w.buff = make([]byte, w.opts.Size())
+		w.buff = make([]byte, w.ix.Size())
 	}
 
-	if err := w.opts.Write(it, w.buff); err != nil {
+	if err := w.ix.Write(it, w.buff); err != nil {
 		return err
 	}
 
@@ -55,25 +55,25 @@ func (w *Writer) Write(it Item) error {
 	return nil
 }
 
-func (w *Writer) Size() int64 {
+func (w *Writer[IX, IT]) Size() int64 {
 	return w.pos
 }
 
-func (w *Writer) Sync() error {
+func (w *Writer[IX, IT]) Sync() error {
 	if err := w.f.Sync(); err != nil {
 		return kleverr.Newf("could not sync index: %w", err)
 	}
 	return nil
 }
 
-func (w *Writer) Close() error {
+func (w *Writer[IX, IT]) Close() error {
 	if err := w.f.Close(); err != nil {
 		return kleverr.Newf("could not close index: %w", err)
 	}
 	return nil
 }
 
-func (w *Writer) SyncAndClose() error {
+func (w *Writer[IX, IT]) SyncAndClose() error {
 	if err := w.f.Sync(); err != nil {
 		return kleverr.Newf("could not sync index: %w", err)
 	}
@@ -83,14 +83,14 @@ func (w *Writer) SyncAndClose() error {
 	return nil
 }
 
-func Write(path string, opts Params, index []Item) error {
-	w, err := OpenWriter(path, opts)
+func Write[IX Index[IT], IT IndexItem](path string, ix IX, items []IT) error {
+	w, err := OpenWriter(path, ix)
 	if err != nil {
 		return err
 	}
 	defer w.Close()
 
-	for _, item := range index {
+	for _, item := range items {
 		if err := w.Write(item); err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func Write(path string, opts Params, index []Item) error {
 	return w.SyncAndClose()
 }
 
-func Read(path string, opts Index[Item]) ([]Item, error) {
+func Read[IX Index[IT], IT IndexItem](path string, ix IX) ([]IT, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, kleverr.Newf("could not open index: %w", err)
@@ -112,7 +112,7 @@ func Read(path string, opts Index[Item]) ([]Item, error) {
 	}
 	dataSize := stat.Size()
 
-	itemSize := opts.Size()
+	itemSize := ix.Size()
 	if dataSize%itemSize > 0 {
 		return nil, kleverr.Newf("%w: unexpected data len: %d", ErrCorrupted, dataSize)
 	}
@@ -122,11 +122,11 @@ func Read(path string, opts Index[Item]) ([]Item, error) {
 		return nil, kleverr.Newf("could not read index: %w", err)
 	}
 
-	var items = make([]Item, dataSize/int64(itemSize))
+	var items = make([]IT, dataSize/int64(itemSize))
 	for i := range items {
 		pos := i * int(itemSize)
 
-		if item, err := opts.Read(data[pos:]); err != nil {
+		if item, err := ix.Read(data[pos:]); err != nil {
 			return nil, kleverr.Newf("could not read index: %w", err)
 		} else {
 			items[i] = item

@@ -7,13 +7,34 @@ import (
 )
 
 type Item struct {
-	Offset    int64
-	Position  int64
-	Timestamp int64
-	KeyHash   uint64
+	offset    int64
+	position  int64
+	timestamp int64
+	keyHash   uint64
 }
 
 var _ IndexItem = Item{}
+
+func (o Item) Offset() int64 {
+	return o.offset
+}
+
+func (o Item) Position() int64 {
+	return o.position
+}
+
+func (o Item) Timestamp() int64 {
+	return o.timestamp
+}
+
+func (o Item) KeyHash() uint64 {
+	return o.keyHash
+}
+
+func (o Item) Equal(other IndexItem) bool {
+	oit := other.(Item)
+	return o == oit
+}
 
 type Params struct {
 	times     bool
@@ -47,18 +68,18 @@ func (p Params) Size() int64 {
 }
 
 func (p Params) New(m message.Message, position int64, prevts int64) (Item, error) {
-	it := Item{Offset: m.Offset, Position: position}
+	it := Item{offset: m.Offset, position: position}
 
 	if p.times {
-		it.Timestamp = m.Time.UnixMicro()
+		it.timestamp = m.Time.UnixMicro()
 		// guarantee timestamp monotonic increase
-		if it.Timestamp < prevts {
-			it.Timestamp = prevts
+		if it.timestamp < prevts {
+			it.timestamp = prevts
 		}
 	}
 
 	if p.keys {
-		it.KeyHash = KeyHash(m.Key)
+		it.keyHash = KeyHash(m.Key)
 	}
 
 	return it, nil
@@ -67,30 +88,30 @@ func (p Params) New(m message.Message, position int64, prevts int64) (Item, erro
 func (p Params) Read(buff []byte) (Item, error) {
 	var o Item
 
-	o.Offset = int64(binary.BigEndian.Uint64(buff[0:]))
-	o.Position = int64(binary.BigEndian.Uint64(buff[8:]))
+	o.offset = int64(binary.BigEndian.Uint64(buff[0:]))
+	o.position = int64(binary.BigEndian.Uint64(buff[8:]))
 
 	if p.times {
-		o.Timestamp = int64(binary.BigEndian.Uint64(buff[16:]))
+		o.timestamp = int64(binary.BigEndian.Uint64(buff[16:]))
 	}
 
 	if p.keys {
-		o.KeyHash = binary.BigEndian.Uint64(buff[p.keyOffset:])
+		o.keyHash = binary.BigEndian.Uint64(buff[p.keyOffset:])
 	}
 
 	return o, nil
 }
 
 func (p Params) Write(o Item, buff []byte) error {
-	binary.BigEndian.PutUint64(buff[0:], uint64(o.Offset))
-	binary.BigEndian.PutUint64(buff[8:], uint64(o.Position))
+	binary.BigEndian.PutUint64(buff[0:], uint64(o.offset))
+	binary.BigEndian.PutUint64(buff[8:], uint64(o.position))
 
 	if p.times {
-		binary.BigEndian.PutUint64(buff[16:], uint64(o.Timestamp))
+		binary.BigEndian.PutUint64(buff[16:], uint64(o.timestamp))
 	}
 
 	if p.keys {
-		binary.BigEndian.PutUint64(buff[p.keyOffset:], o.KeyHash)
+		binary.BigEndian.PutUint64(buff[p.keyOffset:], o.keyHash)
 	}
 
 	return nil

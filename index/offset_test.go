@@ -11,7 +11,7 @@ import (
 func genItems(offsets ...int64) []Item {
 	items := make([]Item, len(offsets))
 	for i, v := range offsets {
-		items[i] = Item{Offset: v, Position: v}
+		items[i] = Item{offset: v, position: v}
 	}
 	return items
 }

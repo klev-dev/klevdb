@@ -3,6 +3,8 @@ package index
 import "github.com/klev-dev/klevdb/message"
 
 type IndexItem interface {
+	Timestamp() int64 // TODO get rid of this
+	Equal(other IndexItem) bool
 }
 
 type Index[I IndexItem] interface {

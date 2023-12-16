@@ -139,7 +139,7 @@ func Stat(dir string, opts Options) (Stats, error) {
 
 // Backup backups a store directory to another location, without opening the store
 func Backup(src, dst string) error {
-	return segment.BackupDir(src, dst)
+	return segment.BackupDir[index.Params, index.Item](src, dst)
 }
 
 // Check runs an integrity check, without opening the store

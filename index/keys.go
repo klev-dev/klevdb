@@ -24,13 +24,13 @@ func KeyHashEncoded(h uint64) []byte {
 func AppendKeys(keys art.Tree, items []Item) {
 	hash := make([]byte, 8)
 	for _, item := range items {
-		binary.BigEndian.PutUint64(hash, item.KeyHash)
+		binary.BigEndian.PutUint64(hash, item.keyHash)
 
 		var positions []int64
 		if v, found := keys.Search(hash); found {
 			positions = v.([]int64)
 		}
-		positions = append(positions, item.Position)
+		positions = append(positions, item.position)
 
 		keys.Insert(hash, positions)
 	}

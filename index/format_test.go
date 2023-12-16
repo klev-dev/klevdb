@@ -14,10 +14,10 @@ var iopts = NewParams(true, true)
 func createIndex(dir string, itemCount int) (string, error) {
 	var items = make([]Item, itemCount)
 	for i := range items {
-		items[i].Offset = int64(i)
-		items[i].Position = int64(i)
-		items[i].Timestamp = int64(i)
-		items[i].KeyHash = uint64(i)
+		items[i].offset = int64(i)
+		items[i].position = int64(i)
+		items[i].timestamp = int64(i)
+		items[i].keyHash = uint64(i)
 	}
 	filename := filepath.Join(dir, "index")
 	return filename, Write(filename, iopts, items)
@@ -34,9 +34,9 @@ func TestWriteRead(t *testing.T) {
 	require.Len(t, items, indexSz)
 
 	for i, item := range items {
-		require.Equal(t, int64(i), item.Offset)
-		require.Equal(t, int64(i), item.Position)
-		require.Equal(t, int64(i), item.Timestamp)
-		require.Equal(t, uint64(i), item.KeyHash)
+		require.Equal(t, int64(i), item.offset)
+		require.Equal(t, int64(i), item.position)
+		require.Equal(t, int64(i), item.timestamp)
+		require.Equal(t, uint64(i), item.keyHash)
 	}
 }

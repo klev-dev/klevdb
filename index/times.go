@@ -14,21 +14,21 @@ func Time(items []Item, ts int64) (int64, error) {
 	beginIndex := 0
 	beginItem := items[beginIndex]
 	switch {
-	case ts < beginItem.Timestamp:
+	case ts < beginItem.timestamp:
 		return 0, message.ErrInvalidOffset
-	case ts == beginItem.Timestamp:
-		return beginItem.Position, nil
+	case ts == beginItem.timestamp:
+		return beginItem.position, nil
 	}
 
 	endIndex := len(items) - 1
 	endItem := items[endIndex]
 	switch {
-	case endItem.Timestamp < ts:
+	case endItem.timestamp < ts:
 		return 0, message.ErrNotFound
 	}
 
 	foundIndex := sort.Search(len(items), func(midIndex int) bool {
-		return items[midIndex].Timestamp >= ts
+		return items[midIndex].timestamp >= ts
 	})
-	return items[foundIndex].Position, nil
+	return items[foundIndex].position, nil
 }
