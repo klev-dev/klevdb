@@ -88,24 +88,24 @@ func (ix TimeKeyIndex) NewRuntime(items []TimeKeyItem, nextOffset int64, nextTim
 	}
 
 	if ln := len(items); ln > 0 {
-		AppendKeys(r.keys, items)
 		nextTime = items[ln-1].timestamp
+		AppendKeys(r.keys, items)
 	}
 	r.nextTime.Store(nextTime)
 
 	return r
 }
 
-func (ix TimeKeyIndex) Append(s *TimeKeyIndexRuntime, items []TimeKeyItem) int64 {
+func (ix TimeKeyIndex) Append(r *TimeKeyIndexRuntime, items []TimeKeyItem) int64 {
 	if ln := len(items); ln > 0 {
-		AppendKeys(s.keys, items)
-		s.nextTime.Store(items[ln-1].timestamp)
+		r.nextTime.Store(items[ln-1].timestamp)
+		AppendKeys(r.keys, items)
 	}
-	return s.Append(items)
+	return r.Append(items)
 }
 
-func (ix TimeKeyIndex) Next(s *TimeKeyIndexRuntime) (int64, int64) {
-	return s.nextOffset.Load(), s.nextTime.Load()
+func (ix TimeKeyIndex) Next(r *TimeKeyIndexRuntime) (int64, int64) {
+	return r.nextOffset.Load(), r.nextTime.Load()
 }
 
 func (ix TimeKeyIndex) Equal(l, r TimeKeyItem) bool {
@@ -118,10 +118,10 @@ type TimeKeyIndexRuntime struct {
 	keys     art.Tree
 }
 
-func (s *TimeKeyIndexRuntime) Keys(hash []byte) ([]int64, error) {
-	return Keys(s.keys, hash)
+func (r *TimeKeyIndexRuntime) Keys(hash []byte) ([]int64, error) {
+	return Keys(r.keys, hash)
 }
 
-func (s *TimeKeyIndexRuntime) Time(ts int64) (int64, error) {
-	return Time(s.items, ts)
+func (r *TimeKeyIndexRuntime) Time(ts int64) (int64, error) {
+	return Time(r.items, ts)
 }

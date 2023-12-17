@@ -80,15 +80,15 @@ func (ix KeyIndex) NewRuntime(items []KeyItem, nextOffset int64, _ struct{}) *Ke
 	return r
 }
 
-func (ix KeyIndex) Append(s *KeyIndexRuntime, items []KeyItem) int64 {
+func (ix KeyIndex) Append(r *KeyIndexRuntime, items []KeyItem) int64 {
 	if len(items) > 0 {
-		AppendKeys(s.keys, items)
+		AppendKeys(r.keys, items)
 	}
-	return s.Append(items)
+	return r.Append(items)
 }
 
-func (ix KeyIndex) Next(s *KeyIndexRuntime) (int64, struct{}) {
-	return s.nextOffset.Load(), ix.zero
+func (ix KeyIndex) Next(r *KeyIndexRuntime) (int64, struct{}) {
+	return r.nextOffset.Load(), ix.zero
 }
 
 func (ix KeyIndex) Equal(l, r KeyItem) bool {
@@ -100,6 +100,6 @@ type KeyIndexRuntime struct {
 	keys art.Tree
 }
 
-func (s *KeyIndexRuntime) Keys(hash []byte) ([]int64, error) {
-	return Keys(s.keys, hash)
+func (r *KeyIndexRuntime) Keys(hash []byte) ([]int64, error) {
+	return Keys(r.keys, hash)
 }

@@ -85,15 +85,15 @@ func (ix TimeIndex) NewRuntime(items []TimeItem, nextOffset int64, nextTime int6
 	return r
 }
 
-func (ix TimeIndex) Append(s *TimeIndexRuntime, items []TimeItem) int64 {
+func (ix TimeIndex) Append(r *TimeIndexRuntime, items []TimeItem) int64 {
 	if ln := len(items); ln > 0 {
-		s.nextTime.Store(items[ln-1].timestamp)
+		r.nextTime.Store(items[ln-1].timestamp)
 	}
-	return s.Append(items)
+	return r.Append(items)
 }
 
-func (ix TimeIndex) Next(s *TimeIndexRuntime) (int64, int64) {
-	return s.nextOffset.Load(), s.nextTime.Load()
+func (ix TimeIndex) Next(r *TimeIndexRuntime) (int64, int64) {
+	return r.nextOffset.Load(), r.nextTime.Load()
 }
 
 func (ix TimeIndex) Equal(l, r TimeItem) bool {
@@ -105,6 +105,6 @@ type TimeIndexRuntime struct {
 	nextTime atomic.Int64
 }
 
-func (s *TimeIndexRuntime) Time(ts int64) (int64, error) {
-	return Time(s.items, ts)
+func (r *TimeIndexRuntime) Time(ts int64) (int64, error) {
+	return Time(r.items, ts)
 }

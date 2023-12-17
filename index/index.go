@@ -64,12 +64,12 @@ func (ix OffsetIndex) NewRuntime(items []OffsetItem, nextOffset int64, _ struct{
 	return newOffsetRuntime[OffsetItem](items, nextOffset)
 }
 
-func (ix OffsetIndex) Append(s *OffsetRuntime, items []OffsetItem) int64 {
-	return s.Append(items)
+func (ix OffsetIndex) Append(r *OffsetRuntime, items []OffsetItem) int64 {
+	return r.Append(items)
 }
 
-func (ix OffsetIndex) Next(s *OffsetRuntime) (int64, struct{}) {
-	return s.nextOffset.Load(), ix.zero
+func (ix OffsetIndex) Next(r *OffsetRuntime) (int64, struct{}) {
+	return r.nextOffset.Load(), ix.zero
 }
 
 func (ix OffsetIndex) Equal(l, r OffsetItem) bool {
