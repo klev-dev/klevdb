@@ -30,11 +30,6 @@ func (o TimeKeyItem) KeyHash() uint64 {
 	return o.keyHash
 }
 
-func (o TimeKeyItem) Equal(other IndexItem) bool {
-	oit := other.(TimeKeyItem)
-	return o == oit
-}
-
 type TimeKeyIndex struct {
 }
 
@@ -97,6 +92,10 @@ func (ix TimeKeyIndex) NewStore(items []TimeKeyItem) *TimeKeyIndexStore {
 func (ix TimeKeyIndex) Append(s *TimeKeyIndexStore, items []TimeKeyItem) {
 	s.items = append(s.items, items...)
 	AppendKeys(s.keys, items)
+}
+
+func (ix TimeKeyIndex) Equal(l, r TimeKeyItem) bool {
+	return l == r
 }
 
 type TimeKeyIndexStore struct {

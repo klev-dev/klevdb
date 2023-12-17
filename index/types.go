@@ -11,7 +11,6 @@ var ErrNoIndex = errors.New("no index")
 type IndexItem interface {
 	Offset() int64
 	Position() int64
-	Equal(other IndexItem) bool
 }
 
 type IndexContext any
@@ -28,6 +27,8 @@ type Index[I IndexItem, C IndexContext, S IndexStore] interface {
 
 	NewStore(items []I) S
 	Append(s S, items []I)
+
+	Equal(l, r I) bool
 }
 
 type IndexStore interface {

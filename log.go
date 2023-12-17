@@ -64,7 +64,7 @@ func open[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext,
 		lock: lock,
 	}
 
-	segments, err := segment.Find[IX, IT, IC](dir)
+	segments, err := segment.Find[IX](dir)
 	if err != nil {
 		return nil, err
 	}
@@ -72,10 +72,10 @@ func open[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext,
 	if len(segments) == 0 {
 		if opts.Readonly {
 			rix := newReaderIndex[IX](ix, nil, 0, true)
-			rdr := reopenReader(segment.New[IX, IT, IC, IS](dir, 0), ix, rix)
+			rdr := reopenReader(segment.New[IX](dir, 0), ix, rix)
 			l.readers = []*reader[IX, IT, IC, IS]{rdr}
 		} else {
-			w, err := openWriter(segment.New[IX, IT, IC, IS](dir, 0), ix, ix.NewContext())
+			w, err := openWriter(segment.New[IX](dir, 0), ix, ix.NewContext())
 			if err != nil {
 				return nil, err
 			}
@@ -141,7 +141,7 @@ func (l *log[IX, IT, IC, IS]) Publish(msgs []message.Message) (int64, error) {
 		}
 
 		oldReader, nextOffset, nextTime := l.writer.ReopenReader()
-		newWriter, err := openWriter(segment.New[IX, IT, IC](l.dir, nextOffset), l.ix, nextTime)
+		newWriter, err := openWriter(segment.New[IX](l.dir, nextOffset), l.ix, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}

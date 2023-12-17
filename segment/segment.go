@@ -98,7 +98,7 @@ func (s Segment[IX, IT, IC, IS]) Check(ix IX) error {
 		return kleverr.Newf("%s: incorrect index size: %w", s.Index, index.ErrCorrupted)
 	default:
 		for i, item := range logIndex {
-			if !item.Equal(items[i]) {
+			if !ix.Equal(item, items[i]) {
 				return kleverr.Newf("%s: incorrect index item: %w", s.Index, index.ErrCorrupted)
 			}
 		}
@@ -181,7 +181,7 @@ func (s Segment[IX, IT, IC, IS]) Recover(ix IX) error {
 		corruptedIndex = true
 	default:
 		for i, item := range logIndex {
-			if !item.Equal(items[i]) {
+			if !ix.Equal(item, items[i]) {
 				corruptedIndex = true
 				break
 			}

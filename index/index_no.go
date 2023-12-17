@@ -20,11 +20,6 @@ func (o NoItem) Position() int64 {
 	return o.position
 }
 
-func (o NoItem) Equal(other IndexItem) bool {
-	oit := other.(NoItem)
-	return o == oit
-}
-
 type NoIndex struct {
 	zero struct{}
 }
@@ -72,6 +67,10 @@ func (ix NoIndex) NewStore(items []NoItem) *NoIndexStore {
 
 func (ix NoIndex) Append(s *NoIndexStore, items []NoItem) {
 	s.items = append(s.items, items...)
+}
+
+func (ix NoIndex) Equal(l, r NoItem) bool {
+	return l == r
 }
 
 type NoIndexStore struct {

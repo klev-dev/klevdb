@@ -26,11 +26,6 @@ func (o KeyItem) KeyHash() uint64 {
 	return o.keyHash
 }
 
-func (o KeyItem) Equal(other IndexItem) bool {
-	oit := other.(KeyItem)
-	return o == oit
-}
-
 type KeyIndex struct {
 	zero struct{}
 }
@@ -85,6 +80,10 @@ func (ix KeyIndex) NewStore(items []KeyItem) *KeyIndexStore {
 func (ix KeyIndex) Append(s *KeyIndexStore, items []KeyItem) {
 	s.items = append(s.items, items...)
 	AppendKeys(s.keys, items)
+}
+
+func (ix KeyIndex) Equal(l, r KeyItem) bool {
+	return l == r
 }
 
 type KeyIndexStore struct {

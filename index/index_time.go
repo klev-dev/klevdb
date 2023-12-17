@@ -25,11 +25,6 @@ func (o TimeItem) Timestamp() int64 {
 	return o.timestamp
 }
 
-func (o TimeItem) Equal(other IndexItem) bool {
-	oit := other.(TimeItem)
-	return o == oit
-}
-
 type TimeIndex struct {
 }
 
@@ -85,6 +80,10 @@ func (ix TimeIndex) NewStore(items []TimeItem) *TimeIndexStore {
 
 func (ix TimeIndex) Append(s *TimeIndexStore, items []TimeItem) {
 	s.items = append(s.items, items...)
+}
+
+func (ix TimeIndex) Equal(l, r TimeItem) bool {
+	return l == r
 }
 
 type TimeIndexStore struct {
