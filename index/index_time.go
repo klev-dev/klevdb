@@ -74,7 +74,7 @@ func (ix TimeIndex) Write(item TimeItem, buff []byte) error {
 
 func (ix TimeIndex) NewRuntime(items []TimeItem, nextOffset int64, nextTime int64) *TimeIndexRuntime {
 	r := &TimeIndexRuntime{
-		baseRuntime: newBaseRuntime(items, nextOffset),
+		OffsetRuntimeT: newOffsetRuntime(items, nextOffset),
 	}
 
 	if ln := len(items); ln > 0 {
@@ -101,7 +101,7 @@ func (ix TimeIndex) Equal(l, r TimeItem) bool {
 }
 
 type TimeIndexRuntime struct {
-	*baseRuntime[TimeItem]
+	*OffsetRuntimeT[TimeItem]
 	nextTime atomic.Int64
 }
 

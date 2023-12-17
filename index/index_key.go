@@ -69,8 +69,8 @@ func (ix KeyIndex) Write(item KeyItem, buff []byte) error {
 
 func (ix KeyIndex) NewRuntime(items []KeyItem, nextOffset int64, _ struct{}) *KeyIndexRuntime {
 	r := &KeyIndexRuntime{
-		baseRuntime: newBaseRuntime(items, nextOffset),
-		keys:        art.New(),
+		OffsetRuntimeT: newOffsetRuntime(items, nextOffset),
+		keys:           art.New(),
 	}
 
 	if len(items) > 0 {
@@ -96,7 +96,7 @@ func (ix KeyIndex) Equal(l, r KeyItem) bool {
 }
 
 type KeyIndexRuntime struct {
-	*baseRuntime[KeyItem]
+	*OffsetRuntimeT[KeyItem]
 	keys art.Tree
 }
 

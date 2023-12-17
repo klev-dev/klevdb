@@ -83,8 +83,8 @@ func (ix TimeKeyIndex) Write(item TimeKeyItem, buff []byte) error {
 
 func (ix TimeKeyIndex) NewRuntime(items []TimeKeyItem, nextOffset int64, nextTime int64) *TimeKeyIndexRuntime {
 	r := &TimeKeyIndexRuntime{
-		baseRuntime: newBaseRuntime(items, nextOffset),
-		keys:        art.New(),
+		OffsetRuntimeT: newOffsetRuntime(items, nextOffset),
+		keys:           art.New(),
 	}
 
 	if ln := len(items); ln > 0 {
@@ -113,7 +113,7 @@ func (ix TimeKeyIndex) Equal(l, r TimeKeyItem) bool {
 }
 
 type TimeKeyIndexRuntime struct {
-	*baseRuntime[TimeKeyItem]
+	*OffsetRuntimeT[TimeKeyItem]
 	nextTime atomic.Int64
 	keys     art.Tree
 }

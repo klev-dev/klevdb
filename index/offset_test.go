@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func genItems(offsets ...int64) []NoItem {
-	items := make([]NoItem, len(offsets))
+func genItems(offsets ...int64) []OffsetItem {
+	items := make([]OffsetItem, len(offsets))
 	for i, v := range offsets {
-		items[i] = NoItem{offset: v, position: v}
+		items[i] = OffsetItem{offset: v, position: v}
 	}
 	return items
 }

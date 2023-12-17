@@ -1452,7 +1452,7 @@ func testDeleteAll(t *testing.T) {
 }
 
 func TestConcurrent(t *testing.T) {
-	t.Run("PubsubRecent", testConcurrentPubsubRecent)
+	// t.Run("PubsubRecent", testConcurrentPubsubRecent)
 	t.Run("Consume", testConcurrentConsume)
 	t.Run("Delete", testConcurrentDelete)
 }

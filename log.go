@@ -26,7 +26,7 @@ func Open(dir string, opts Options) (Log, error) {
 	} else if opts.KeyIndex {
 		return open(dir, opts, index.KeyIndex{})
 	}
-	return open(dir, opts, index.NoIndex{})
+	return open(dir, opts, index.OffsetIndex{})
 }
 
 func open[IX index.Index[IT, IS, IR], IT index.Item, IS index.State, IR index.Runtime](dir string, opts Options, ix IX) (Log, error) {

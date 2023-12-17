@@ -141,12 +141,12 @@ func Stat(dir string, opts Options) (Stats, error) {
 	} else if opts.KeyIndex {
 		return segment.StatDir(dir, index.KeyIndex{})
 	}
-	return segment.StatDir(dir, index.NoIndex{})
+	return segment.StatDir(dir, index.OffsetIndex{})
 }
 
 // Backup backups a store directory to another location, without opening the store
 func Backup(src, dst string) error {
-	return segment.BackupDir[index.NoIndex](src, dst)
+	return segment.BackupDir[index.OffsetIndex](src, dst)
 }
 
 // Check runs an integrity check, without opening the store
@@ -158,7 +158,7 @@ func Check(dir string, opts Options) error {
 	} else if opts.KeyIndex {
 		return segment.CheckDir(dir, index.KeyIndex{})
 	}
-	return segment.CheckDir(dir, index.NoIndex{})
+	return segment.CheckDir(dir, index.OffsetIndex{})
 }
 
 // Recover rewrites the storage to include all messages prior the first that fails an integrity check
@@ -170,5 +170,5 @@ func Recover(dir string, opts Options) error {
 	} else if opts.KeyIndex {
 		return segment.RecoverDir(dir, index.KeyIndex{})
 	}
-	return segment.RecoverDir(dir, index.NoIndex{})
+	return segment.RecoverDir(dir, index.OffsetIndex{})
 }

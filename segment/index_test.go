@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func genSegments(offsets ...int64) []Segment[index.NoIndex, index.NoItem, struct{}, *index.NoIndexRuntime] {
-	var segments []Segment[index.NoIndex, index.NoItem, struct{}, *index.NoIndexRuntime]
+func genSegments(offsets ...int64) []Segment[index.OffsetIndex, index.OffsetItem, struct{}, *index.OffsetRuntime] {
+	var segments []Segment[index.OffsetIndex, index.OffsetItem, struct{}, *index.OffsetRuntime]
 	for _, offset := range offsets {
-		segments = append(segments, New[index.NoIndex]("", offset))
+		segments = append(segments, New[index.OffsetIndex]("", offset))
 	}
 	return segments
 }
