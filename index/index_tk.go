@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/klev-dev/klevdb/message"
+	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 type TimeKeyItem struct {
@@ -37,7 +38,7 @@ func (o TimeKeyItem) Equal(other IndexItem) bool {
 type TimeKeyIndex struct {
 }
 
-var _ Index[TimeKeyItem, int64, TimeKeyIndexStore] = TimeKeyIndex{}
+var _ Index[TimeKeyItem, int64, *TimeKeyIndexStore] = TimeKeyIndex{}
 
 func (ix TimeKeyIndex) Size() int64 {
 	return 8 + 8 + 8 + 8
@@ -84,9 +85,45 @@ func (ix TimeKeyIndex) Write(o TimeKeyItem, buff []byte) error {
 	return nil
 }
 
-func (ix TimeKeyIndex) NewStore() TimeKeyIndexStore {
-	return TimeKeyIndexStore{}
+func (ix TimeKeyIndex) NewStore(items []TimeKeyItem) *TimeKeyIndexStore {
+	keys := art.New()
+	AppendKeys(keys, items)
+	return &TimeKeyIndexStore{
+		items: items,
+		keys:  keys,
+	}
+}
+
+func (ix TimeKeyIndex) Append(s *TimeKeyIndexStore, items []TimeKeyItem) {
+	s.items = append(s.items, items...)
+	AppendKeys(s.keys, items)
 }
 
 type TimeKeyIndexStore struct {
+	items []TimeKeyItem
+	keys  art.Tree
+}
+
+func (s TimeKeyIndexStore) GetLastOffset() int64 {
+	return s.items[len(s.items)-1].Offset()
+}
+
+func (s TimeKeyIndexStore) Consume(offset int64) (int64, int64, error) {
+	return Consume(s.items, offset)
+}
+
+func (s TimeKeyIndexStore) Get(offset int64) (int64, error) {
+	return Get(s.items, offset)
+}
+
+func (s TimeKeyIndexStore) Keys(hash []byte) ([]int64, error) {
+	return Keys(s.keys, hash)
+}
+
+func (s TimeKeyIndexStore) Time(ts int64) (int64, error) {
+	return Time(s.items, ts)
+}
+
+func (s TimeKeyIndexStore) Len() int {
+	return len(s.items)
 }

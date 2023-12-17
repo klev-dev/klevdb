@@ -5,8 +5,6 @@ import (
 	"errors"
 	"sync"
 
-	art "github.com/plar/go-adaptive-radix-tree"
-
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
@@ -15,7 +13,6 @@ import (
 type reader[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore] struct {
 	segment segment.Segment[IX, IT, IC, IS]
 	ix      IX
-	keys    bool
 	head    bool
 
 	messages   *message.Reader
@@ -34,27 +31,25 @@ type indexer interface {
 	Len() int
 }
 
-func openReader[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](seg segment.Segment[IX, IT, IC, IS], ix IX, keys bool, head bool) *reader[IX, IT, IC, IS] {
+func openReader[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](seg segment.Segment[IX, IT, IC, IS], ix IX, head bool) *reader[IX, IT, IC, IS] {
 	return &reader[IX, IT, IC, IS]{
 		segment: seg,
 		ix:      ix,
-		keys:    keys,
 		head:    head,
 	}
 }
 
-func reopenReader[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](seg segment.Segment[IX, IT, IC, IS], ix IX, keys bool, ixr indexer) *reader[IX, IT, IC, IS] {
+func reopenReader[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](seg segment.Segment[IX, IT, IC, IS], ix IX, ixr indexer) *reader[IX, IT, IC, IS] {
 	return &reader[IX, IT, IC, IS]{
 		segment: seg,
 		ix:      ix,
-		keys:    keys,
 		head:    false,
 
 		index: ixr,
 	}
 }
 
-func openReaderAppend[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](seg segment.Segment[IX, IT, IC, IS], ix IX, keys bool, ixr indexer) (*reader[IX, IT, IC, IS], error) {
+func openReaderAppend[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](seg segment.Segment[IX, IT, IC, IS], ix IX, ixr indexer) (*reader[IX, IT, IC, IS], error) {
 	messages, err := message.OpenReader(seg.Log)
 	if err != nil {
 		return nil, err
@@ -63,7 +58,6 @@ func openReaderAppend[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.I
 	return &reader[IX, IT, IC, IS]{
 		segment: seg,
 		ix:      ix,
-		keys:    keys,
 		head:    true,
 
 		messages: messages,
@@ -280,7 +274,7 @@ func (r *reader[IX, IT, IC, IS]) Delete(rs *segment.RewriteSegment[IX, IT, IC, I
 			return nil, err
 		}
 
-		return &reader[IX, IT, IC, IS]{segment: nseg, ix: r.ix, keys: r.keys}, nil
+		return &reader[IX, IT, IC, IS]{segment: nseg, ix: r.ix}, nil
 	}
 
 	// the rewritten segment has the same starting offset
@@ -311,7 +305,7 @@ func (r *reader[IX, IT, IC, IS]) getIndex() (indexer, error) {
 		return nil, err
 	}
 
-	r.index = newReaderIndex[IX, IT, IC](items, r.keys, r.segment.Offset, r.head)
+	r.index = newReaderIndex[IX, IT, IC, IS](r.ix, items, r.segment.Offset, r.head)
 	return r.index, nil
 }
 
@@ -360,27 +354,19 @@ func (r *reader[IX, IT, IC, IS]) Close() error {
 }
 
 type readerIndex[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore] struct {
-	items      []IT
-	keys       art.Tree
+	store      IS
 	nextOffset int64
 	head       bool
 }
 
-func newReaderIndex[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](items []IT, hasKeys bool, offset int64, head bool) *readerIndex[IX, IT, IC, IS] {
-	var keys art.Tree
-	if hasKeys {
-		keys = art.New()
-		index.AppendKeys(keys, items)
-	}
-
+func newReaderIndex[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](ix IX, items []IT, offset int64, head bool) *readerIndex[IX, IT, IC, IS] {
 	nextOffset := offset
 	if len(items) > 0 {
 		nextOffset = items[len(items)-1].Offset() + 1
 	}
 
 	return &readerIndex[IX, IT, IC, IS]{
-		items:      items,
-		keys:       keys,
+		store:      ix.NewStore(items),
 		nextOffset: nextOffset,
 		head:       head,
 	}
@@ -391,7 +377,7 @@ func (rix *readerIndex[IX, IT, IC, IS]) GetNextOffset() (int64, error) {
 }
 
 func (rix *readerIndex[IX, IT, IC, IS]) Consume(offset int64) (int64, int64, int64, error) {
-	position, maxPosition, err := index.Consume(rix.items, offset)
+	position, maxPosition, err := rix.store.Consume(offset)
 	if err != nil && rix.head {
 		switch {
 		case err == index.ErrIndexEmpty:
@@ -408,7 +394,7 @@ func (rix *readerIndex[IX, IT, IC, IS]) Consume(offset int64) (int64, int64, int
 }
 
 func (rix *readerIndex[IX, IT, IC, IS]) Get(offset int64) (int64, error) {
-	position, err := index.Get(rix.items, offset)
+	position, err := rix.store.Get(offset)
 	if err == message.ErrNotFound && rix.head && offset >= rix.nextOffset {
 		return -1, message.ErrInvalidOffset
 	}
@@ -416,13 +402,13 @@ func (rix *readerIndex[IX, IT, IC, IS]) Get(offset int64) (int64, error) {
 }
 
 func (rix *readerIndex[IX, IT, IC, IS]) Keys(keyHash []byte) ([]int64, error) {
-	return index.Keys(rix.keys, keyHash)
+	return rix.store.Keys(keyHash)
 }
 
 func (rix *readerIndex[IX, IT, IC, IS]) Time(ts int64) (int64, error) {
-	return index.Time(rix.items, ts)
+	return rix.store.Time(ts)
 }
 
 func (rix *readerIndex[IX, IT, IC, IS]) Len() int {
-	return len(rix.items)
+	return rix.store.Len()
 }

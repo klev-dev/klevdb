@@ -35,7 +35,7 @@ type timeKeyIndexSegment = Segment[
 	index.TimeKeyIndex,
 	index.TimeKeyItem,
 	int64,
-	index.TimeKeyIndexStore,
+	*index.TimeKeyIndexStore,
 ]
 
 func TestRecover(t *testing.T) {
@@ -137,7 +137,7 @@ func TestRecover(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New[index.TimeKeyIndex, index.TimeKeyItem, int64, index.TimeKeyIndexStore](t.TempDir(), 0)
+			seg := New[index.TimeKeyIndex, index.TimeKeyItem, int64, *index.TimeKeyIndexStore](t.TempDir(), 0)
 			writeMessages(t, seg, ix, test.in)
 
 			require.NoError(t, test.corrupt(seg))

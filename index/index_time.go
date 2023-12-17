@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/kleverr"
 )
 
 type TimeItem struct {
@@ -32,7 +33,7 @@ func (o TimeItem) Equal(other IndexItem) bool {
 type TimeIndex struct {
 }
 
-var _ Index[TimeItem, int64, TimeIndexStore] = TimeIndex{}
+var _ Index[TimeItem, int64, *TimeIndexStore] = TimeIndex{}
 
 func (ix TimeIndex) Size() int64 {
 	return 8 + 8 + 8
@@ -76,9 +77,40 @@ func (ix TimeIndex) Write(o TimeItem, buff []byte) error {
 	return nil
 }
 
-func (ix TimeIndex) NewStore() TimeIndexStore {
-	return TimeIndexStore{}
+func (ix TimeIndex) NewStore(items []TimeItem) *TimeIndexStore {
+	return &TimeIndexStore{
+		items: items,
+	}
+}
+
+func (ix TimeIndex) Append(s *TimeIndexStore, items []TimeItem) {
+	s.items = append(s.items, items...)
 }
 
 type TimeIndexStore struct {
+	items []TimeItem
+}
+
+func (s TimeIndexStore) GetLastOffset() int64 {
+	return s.items[len(s.items)-1].Offset()
+}
+
+func (s TimeIndexStore) Consume(offset int64) (int64, int64, error) {
+	return Consume(s.items, offset)
+}
+
+func (s TimeIndexStore) Get(offset int64) (int64, error) {
+	return Get(s.items, offset)
+}
+
+func (s TimeIndexStore) Keys(_ []byte) ([]int64, error) {
+	return nil, kleverr.Newf("%w by key", ErrNoIndex)
+}
+
+func (s TimeIndexStore) Time(ts int64) (int64, error) {
+	return Time(s.items, ts)
+}
+
+func (s TimeIndexStore) Len() int {
+	return len(s.items)
 }

@@ -32,7 +32,7 @@ var ErrInvalidOffset = message.ErrInvalidOffset
 var ErrNotFound = message.ErrNotFound
 
 // ErrNoIndex error is returned when we try to use key or timestamp, but the log doesn't include index on them
-var ErrNoIndex = errors.New("no index")
+var ErrNoIndex = index.ErrNoIndex
 
 // ErrReadonly error is returned when attempting to modify (e.g. publish or delete) from a log that is open as a readonly
 var ErrReadonly = errors.New("log opened in readonly mode")

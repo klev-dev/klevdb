@@ -71,11 +71,11 @@ func open[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext,
 
 	if len(segments) == 0 {
 		if opts.Readonly {
-			rix := newReaderIndex[IX](nil, opts.KeyIndex, 0, true)
-			rdr := reopenReader(segment.New[IX, IT, IC, IS](dir, 0), ix, opts.KeyIndex, rix)
+			rix := newReaderIndex[IX](ix, nil, 0, true)
+			rdr := reopenReader(segment.New[IX, IT, IC, IS](dir, 0), ix, rix)
 			l.readers = []*reader[IX, IT, IC, IS]{rdr}
 		} else {
-			w, err := openWriter(segment.New[IX, IT, IC, IS](dir, 0), ix, opts.KeyIndex, ix.NewContext())
+			w, err := openWriter(segment.New[IX, IT, IC, IS](dir, 0), ix, ix.NewContext())
 			if err != nil {
 				return nil, err
 			}
@@ -91,15 +91,15 @@ func open[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext,
 		}
 
 		for _, seg := range segments[:len(segments)-1] {
-			rdr := openReader(seg, ix, opts.KeyIndex, false)
+			rdr := openReader(seg, ix, false)
 			l.readers = append(l.readers, rdr)
 		}
 
 		if opts.Readonly {
-			rdr := openReader(head, ix, opts.KeyIndex, true)
+			rdr := openReader(head, ix, true)
 			l.readers = append(l.readers, rdr)
 		} else {
-			wrt, err := openWriter(head, ix, opts.KeyIndex, ix.NewContext())
+			wrt, err := openWriter(head, ix, ix.NewContext())
 			if err != nil {
 				return nil, err
 			}
@@ -141,7 +141,7 @@ func (l *log[IX, IT, IC, IS]) Publish(msgs []message.Message) (int64, error) {
 		}
 
 		oldReader, nextOffset, nextTime := l.writer.ReopenReader()
-		newWriter, err := openWriter(segment.New[IX, IT, IC](l.dir, nextOffset), l.ix, l.opts.KeyIndex, nextTime)
+		newWriter, err := openWriter(segment.New[IX, IT, IC](l.dir, nextOffset), l.ix, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/kleverr"
 )
 
 type NoItem struct {
@@ -28,7 +29,7 @@ type NoIndex struct {
 	zero struct{}
 }
 
-var _ Index[NoItem, struct{}, NoIndexStore] = NoIndex{}
+var _ Index[NoItem, struct{}, *NoIndexStore] = NoIndex{}
 
 func (ix NoIndex) Size() int64 {
 	return 8 + 8
@@ -63,9 +64,40 @@ func (ix NoIndex) Write(o NoItem, buff []byte) error {
 	return nil
 }
 
-func (ix NoIndex) NewStore() NoIndexStore {
-	return NoIndexStore{}
+func (ix NoIndex) NewStore(items []NoItem) *NoIndexStore {
+	return &NoIndexStore{
+		items: items,
+	}
+}
+
+func (ix NoIndex) Append(s *NoIndexStore, items []NoItem) {
+	s.items = append(s.items, items...)
 }
 
 type NoIndexStore struct {
+	items []NoItem
+}
+
+func (s NoIndexStore) GetLastOffset() int64 {
+	return s.items[len(s.items)-1].Offset()
+}
+
+func (s NoIndexStore) Consume(offset int64) (int64, int64, error) {
+	return Consume(s.items, offset)
+}
+
+func (s NoIndexStore) Get(offset int64) (int64, error) {
+	return Get(s.items, offset)
+}
+
+func (s NoIndexStore) Keys(_ []byte) ([]int64, error) {
+	return nil, kleverr.Newf("%w by key", ErrNoIndex)
+}
+
+func (s NoIndexStore) Time(_ int64) (int64, error) {
+	return -1, kleverr.Newf("%w by time", ErrNoIndex)
+}
+
+func (s NoIndexStore) Len() int {
+	return len(s.items)
 }
