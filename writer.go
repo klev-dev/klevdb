@@ -201,8 +201,8 @@ func (w *writer[IX, IT, IC, IS]) Close() error {
 type writerIndex[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore] struct {
 	ix          IX
 	store       IS
-	nextOffset  atomic.Int64
-	nextContext atomicValue[IC]
+	nextOffset  int64
+	nextContext IC
 
 	mu sync.RWMutex
 }
@@ -219,18 +219,24 @@ func newWriterIndex[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.Ind
 		nextOffset = items[len(items)-1].Offset() + 1
 		nextContext = ix.Context(items[len(items)-1])
 	}
-	wix.nextOffset.Store(nextOffset)
-	wix.nextContext.v.Store(nextContext)
+	wix.nextOffset = nextOffset
+	wix.nextContext = nextContext
 
 	return wix
 }
 
 func (wix *writerIndex[IX, IT, IC, IS]) GetNextOffset() (int64, error) {
-	return wix.nextOffset.Load(), nil
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
+
+	return wix.nextOffset, nil
 }
 
 func (wix *writerIndex[IX, IT, IC, IS]) getNext() (int64, IC) {
-	return wix.nextOffset.Load(), wix.nextContext.Load()
+	wix.mu.RLock()
+	defer wix.mu.RUnlock()
+
+	return wix.nextOffset, wix.nextContext
 }
 
 func (wix *writerIndex[IX, IT, IC, IS]) getLastOffset() int64 {
@@ -246,17 +252,17 @@ func (wix *writerIndex[IX, IT, IC, IS]) append(items []IT) int64 {
 
 	wix.ix.Append(wix.store, items)
 	if ln := len(items); ln > 0 {
-		wix.nextContext.Store(wix.ix.Context(items[ln-1]))
-		wix.nextOffset.Store(items[ln-1].Offset() + 1)
+		wix.nextOffset = items[ln-1].Offset() + 1
+		wix.nextContext = wix.ix.Context(items[ln-1])
 	}
-	return wix.nextOffset.Load()
+	return wix.nextOffset
 }
 
 func (wix *writerIndex[IX, IT, IC, IS]) reader() *readerIndex[IX, IT, IC, IS] {
 	wix.mu.RLock()
 	defer wix.mu.RUnlock()
 
-	return &readerIndex[IX, IT, IC, IS]{wix.store, wix.nextOffset.Load(), false}
+	return &readerIndex[IX, IT, IC, IS]{wix.store, wix.nextOffset, false}
 }
 
 func (wix *writerIndex[IX, IT, IC, IS]) Consume(offset int64) (int64, int64, int64, error) {
@@ -265,11 +271,11 @@ func (wix *writerIndex[IX, IT, IC, IS]) Consume(offset int64) (int64, int64, int
 
 	position, maxPosition, err := wix.store.Consume(offset)
 	if err == index.ErrIndexEmpty {
-		if nextOffset := wix.nextOffset.Load(); offset <= nextOffset {
+		if nextOffset := wix.nextOffset; offset <= nextOffset {
 			return -1, -1, nextOffset, nil
 		}
 	} else if err == message.ErrInvalidOffset {
-		if nextOffset := wix.nextOffset.Load(); offset == nextOffset {
+		if nextOffset := wix.nextOffset; offset == nextOffset {
 			return -1, -1, nextOffset, nil
 		}
 	}
@@ -282,7 +288,7 @@ func (wix *writerIndex[IX, IT, IC, IS]) Get(offset int64) (int64, error) {
 
 	position, err := wix.store.Get(offset)
 	if err == message.ErrNotFound {
-		if nextOffset := wix.nextOffset.Load(); offset >= nextOffset {
+		if nextOffset := wix.nextOffset; offset >= nextOffset {
 			return 0, message.ErrInvalidOffset
 		}
 	}
