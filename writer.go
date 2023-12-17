@@ -69,7 +69,7 @@ func (w *writer[IX, IT, IC, IS]) NeedsRollover(rollover int64) bool {
 }
 
 func (w *writer[IX, IT, IC, IS]) Publish(msgs []message.Message) (int64, error) {
-	nextOffset, nextTime := w.index.getNext()
+	nextOffset, nextContext := w.index.getNext()
 
 	items := make([]IT, len(msgs))
 	for i := range msgs {
@@ -83,7 +83,7 @@ func (w *writer[IX, IT, IC, IS]) Publish(msgs []message.Message) (int64, error) 
 			return OffsetInvalid, err
 		}
 
-		items[i], nextTime, err = w.ix.New(msgs[i], position, nextTime)
+		items[i], nextContext, err = w.ix.New(msgs[i], position, nextContext)
 		if err != nil {
 			return OffsetInvalid, err
 		}
