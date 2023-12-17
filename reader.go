@@ -354,26 +354,19 @@ func (r *reader[IX, IT, IS, IR]) Close() error {
 }
 
 type readerIndex[IX index.Index[IT, IS, IR], IT index.Item, IS index.State, IR index.Runtime] struct {
-	runtime    IR
-	nextOffset int64
-	head       bool
+	runtime IR
+	head    bool
 }
 
 func newReaderIndex[IX index.Index[IT, IS, IR], IT index.Item, IS index.State, IR index.Runtime](ix IX, items []IT, offset int64, head bool) *readerIndex[IX, IT, IS, IR] {
-	nextOffset := offset
-	if len(items) > 0 {
-		nextOffset = items[len(items)-1].Offset() + 1
-	}
-
 	return &readerIndex[IX, IT, IS, IR]{
-		runtime:    ix.NewRuntime(items, offset, ix.NewState()),
-		nextOffset: nextOffset,
-		head:       head,
+		runtime: ix.NewRuntime(items, offset, ix.NewState()),
+		head:    head,
 	}
 }
 
 func (rix *readerIndex[IX, IT, IS, IR]) GetNextOffset() (int64, error) {
-	return rix.nextOffset, nil
+	return rix.runtime.GetNextOffset(), nil
 }
 
 func (rix *readerIndex[IX, IT, IS, IR]) Consume(offset int64) (int64, int64, int64, error) {
@@ -381,12 +374,12 @@ func (rix *readerIndex[IX, IT, IS, IR]) Consume(offset int64) (int64, int64, int
 	if err != nil && rix.head {
 		switch {
 		case err == index.ErrIndexEmpty:
-			if offset <= rix.nextOffset {
-				return -1, -1, rix.nextOffset, nil
+			if nextOffset := rix.runtime.GetNextOffset(); offset <= nextOffset {
+				return -1, -1, nextOffset, nil
 			}
 		case err == message.ErrInvalidOffset:
-			if offset == rix.nextOffset {
-				return -1, -1, rix.nextOffset, nil
+			if nextOffset := rix.runtime.GetNextOffset(); offset == nextOffset {
+				return -1, -1, nextOffset, nil
 			}
 		}
 	}
@@ -395,7 +388,7 @@ func (rix *readerIndex[IX, IT, IS, IR]) Consume(offset int64) (int64, int64, int
 
 func (rix *readerIndex[IX, IT, IS, IR]) Get(offset int64) (int64, error) {
 	position, err := rix.runtime.Get(offset)
-	if err == message.ErrNotFound && rix.head && offset >= rix.nextOffset {
+	if err == message.ErrNotFound && rix.head && offset >= rix.runtime.GetNextOffset() {
 		return -1, message.ErrInvalidOffset
 	}
 	return position, err

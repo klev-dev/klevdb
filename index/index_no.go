@@ -60,19 +60,16 @@ func (ix NoIndex) Write(item NoItem, buff []byte) error {
 
 func (ix NoIndex) NewRuntime(items []NoItem, nextOffset int64, _ struct{}) *NoIndexRuntime {
 	return &NoIndexRuntime{
-		baseRuntime: baseRuntime[NoItem]{
-			items:      items,
-			nextOffset: nextOffset,
-		},
+		baseRuntime: newBaseRuntime(items, nextOffset),
 	}
 }
 
-func (ix NoIndex) Append(s *NoIndexRuntime, items []NoItem) {
-	s.items = append(s.items, items...)
+func (ix NoIndex) Append(s *NoIndexRuntime, items []NoItem) int64 {
+	return s.Append(items)
 }
 
 func (ix NoIndex) Next(s *NoIndexRuntime) (int64, struct{}) {
-	return s.nextOffset, ix.zero
+	return s.nextOffset.Load(), ix.zero
 }
 
 func (ix NoIndex) Equal(l, r NoItem) bool {
@@ -80,5 +77,5 @@ func (ix NoIndex) Equal(l, r NoItem) bool {
 }
 
 type NoIndexRuntime struct {
-	baseRuntime[NoItem]
+	*baseRuntime[NoItem]
 }

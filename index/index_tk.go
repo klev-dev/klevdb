@@ -2,6 +2,7 @@ package index
 
 import (
 	"encoding/binary"
+	"sync/atomic"
 
 	"github.com/klev-dev/klevdb/message"
 	art "github.com/plar/go-adaptive-radix-tree"
@@ -81,25 +82,30 @@ func (ix TimeKeyIndex) Write(item TimeKeyItem, buff []byte) error {
 }
 
 func (ix TimeKeyIndex) NewRuntime(items []TimeKeyItem, nextOffset int64, nextTime int64) *TimeKeyIndexRuntime {
-	keys := art.New()
-	AppendKeys(keys, items)
-	return &TimeKeyIndexRuntime{
-		baseRuntime: baseRuntime[TimeKeyItem]{
-			items:      items,
-			nextOffset: nextOffset,
-		},
-		nextTime: nextTime,
-		keys:     keys,
+	r := &TimeKeyIndexRuntime{
+		baseRuntime: newBaseRuntime(items, nextOffset),
+		keys:        art.New(),
 	}
+
+	if ln := len(items); ln > 0 {
+		AppendKeys(r.keys, items)
+		nextTime = items[ln-1].timestamp
+	}
+	r.nextTime.Store(nextTime)
+
+	return r
 }
 
-func (ix TimeKeyIndex) Append(s *TimeKeyIndexRuntime, items []TimeKeyItem) {
-	s.items = append(s.items, items...)
-	AppendKeys(s.keys, items)
+func (ix TimeKeyIndex) Append(s *TimeKeyIndexRuntime, items []TimeKeyItem) int64 {
+	if ln := len(items); ln > 0 {
+		AppendKeys(s.keys, items)
+		s.nextTime.Store(items[ln-1].timestamp)
+	}
+	return s.Append(items)
 }
 
 func (ix TimeKeyIndex) Next(s *TimeKeyIndexRuntime) (int64, int64) {
-	return s.nextOffset, s.nextTime
+	return s.nextOffset.Load(), s.nextTime.Load()
 }
 
 func (ix TimeKeyIndex) Equal(l, r TimeKeyItem) bool {
@@ -107,15 +113,15 @@ func (ix TimeKeyIndex) Equal(l, r TimeKeyItem) bool {
 }
 
 type TimeKeyIndexRuntime struct {
-	baseRuntime[TimeKeyItem]
-	nextTime int64
+	*baseRuntime[TimeKeyItem]
+	nextTime atomic.Int64
 	keys     art.Tree
 }
 
-func (s TimeKeyIndexRuntime) Keys(hash []byte) ([]int64, error) {
+func (s *TimeKeyIndexRuntime) Keys(hash []byte) ([]int64, error) {
 	return Keys(s.keys, hash)
 }
 
-func (s TimeKeyIndexRuntime) Time(ts int64) (int64, error) {
+func (s *TimeKeyIndexRuntime) Time(ts int64) (int64, error) {
 	return Time(s.items, ts)
 }

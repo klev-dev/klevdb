@@ -26,13 +26,14 @@ type Index[I Item, S State, R Runtime] interface {
 	Write(item I, buff []byte) error
 
 	NewRuntime(items []I, nextOffset int64, nextState S) R
-	Append(run R, items []I)
+	Append(run R, items []I) int64
 	Next(run R) (nextOffset int64, nextState S)
 
 	Equal(l, r I) bool
 }
 
 type Runtime interface {
+	GetNextOffset() int64
 	GetLastOffset() int64
 
 	Consume(offset int64) (int64, int64, error)

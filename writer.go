@@ -198,44 +198,24 @@ func (w *writer[IX, IT, IS, IR]) Close() error {
 }
 
 type writerIndex[IX index.Index[IT, IS, IR], IT index.Item, IS index.State, IR index.Runtime] struct {
-	ix         IX
-	runtime    IR
-	nextOffset int64
-	nextState  IS
-
-	mu sync.RWMutex
+	ix      IX
+	runtime IR
+	mu      sync.RWMutex
 }
 
 func newWriterIndex[IX index.Index[IT, IS, IR], IT index.Item, IS index.State, IR index.Runtime](ix IX, items []IT, offset int64, state IS) *writerIndex[IX, IT, IS, IR] {
-	wix := &writerIndex[IX, IT, IS, IR]{
+	return &writerIndex[IX, IT, IS, IR]{
 		ix:      ix,
 		runtime: ix.NewRuntime(items, offset, state),
 	}
-
-	nextOffset := offset
-	nextState := state
-	if len(items) > 0 {
-		nextOffset = items[len(items)-1].Offset() + 1
-		nextState = ix.State(items[len(items)-1])
-	}
-	wix.nextOffset = nextOffset
-	wix.nextState = nextState
-
-	return wix
 }
 
 func (wix *writerIndex[IX, IT, IS, IR]) GetNextOffset() (int64, error) {
-	wix.mu.RLock()
-	defer wix.mu.RUnlock()
-
-	return wix.nextOffset, nil
+	return wix.runtime.GetNextOffset(), nil
 }
 
 func (wix *writerIndex[IX, IT, IS, IR]) getNext() (int64, IS) {
-	wix.mu.RLock()
-	defer wix.mu.RUnlock()
-
-	return wix.nextOffset, wix.nextState
+	return wix.ix.Next(wix.runtime)
 }
 
 func (wix *writerIndex[IX, IT, IS, IR]) getLastOffset() int64 {
@@ -249,19 +229,14 @@ func (wix *writerIndex[IX, IT, IS, IR]) append(items []IT) int64 {
 	wix.mu.Lock()
 	defer wix.mu.Unlock()
 
-	wix.ix.Append(wix.runtime, items)
-	if ln := len(items); ln > 0 {
-		wix.nextOffset = items[ln-1].Offset() + 1
-		wix.nextState = wix.ix.State(items[ln-1])
-	}
-	return wix.nextOffset
+	return wix.ix.Append(wix.runtime, items)
 }
 
 func (wix *writerIndex[IX, IT, IS, IR]) reader() *readerIndex[IX, IT, IS, IR] {
 	wix.mu.RLock()
 	defer wix.mu.RUnlock()
 
-	return &readerIndex[IX, IT, IS, IR]{wix.runtime, wix.nextOffset, false}
+	return &readerIndex[IX, IT, IS, IR]{wix.runtime, false}
 }
 
 func (wix *writerIndex[IX, IT, IS, IR]) Consume(offset int64) (int64, int64, int64, error) {
@@ -269,12 +244,13 @@ func (wix *writerIndex[IX, IT, IS, IR]) Consume(offset int64) (int64, int64, int
 	defer wix.mu.RUnlock()
 
 	position, maxPosition, err := wix.runtime.Consume(offset)
-	if err == index.ErrIndexEmpty {
-		if nextOffset := wix.nextOffset; offset <= nextOffset {
+	switch {
+	case err == index.ErrIndexEmpty:
+		if nextOffset := wix.runtime.GetNextOffset(); offset <= nextOffset {
 			return -1, -1, nextOffset, nil
 		}
-	} else if err == message.ErrInvalidOffset {
-		if nextOffset := wix.nextOffset; offset == nextOffset {
+	case err == message.ErrInvalidOffset:
+		if nextOffset := wix.runtime.GetNextOffset(); offset == nextOffset {
 			return -1, -1, nextOffset, nil
 		}
 	}
@@ -287,7 +263,7 @@ func (wix *writerIndex[IX, IT, IS, IR]) Get(offset int64) (int64, error) {
 
 	position, err := wix.runtime.Get(offset)
 	if err == message.ErrNotFound {
-		if nextOffset := wix.nextOffset; offset >= nextOffset {
+		if nextOffset := wix.runtime.GetNextOffset(); offset >= nextOffset {
 			return 0, message.ErrInvalidOffset
 		}
 	}

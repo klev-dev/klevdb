@@ -2,6 +2,7 @@ package index
 
 import (
 	"encoding/binary"
+	"sync/atomic"
 
 	"github.com/klev-dev/klevdb/message"
 )
@@ -72,21 +73,27 @@ func (ix TimeIndex) Write(item TimeItem, buff []byte) error {
 }
 
 func (ix TimeIndex) NewRuntime(items []TimeItem, nextOffset int64, nextTime int64) *TimeIndexRuntime {
-	return &TimeIndexRuntime{
-		baseRuntime: baseRuntime[TimeItem]{
-			items:      items,
-			nextOffset: nextOffset,
-		},
-		nextTime: nextTime,
+	r := &TimeIndexRuntime{
+		baseRuntime: newBaseRuntime(items, nextOffset),
 	}
+
+	if ln := len(items); ln > 0 {
+		nextTime = items[ln-1].timestamp
+	}
+	r.nextTime.Store(nextTime)
+
+	return r
 }
 
-func (ix TimeIndex) Append(s *TimeIndexRuntime, items []TimeItem) {
-	s.items = append(s.items, items...)
+func (ix TimeIndex) Append(s *TimeIndexRuntime, items []TimeItem) int64 {
+	if ln := len(items); ln > 0 {
+		s.nextTime.Store(items[ln-1].timestamp)
+	}
+	return s.Append(items)
 }
 
 func (ix TimeIndex) Next(s *TimeIndexRuntime) (int64, int64) {
-	return s.nextOffset, s.nextTime
+	return s.nextOffset.Load(), s.nextTime.Load()
 }
 
 func (ix TimeIndex) Equal(l, r TimeItem) bool {
@@ -94,10 +101,10 @@ func (ix TimeIndex) Equal(l, r TimeItem) bool {
 }
 
 type TimeIndexRuntime struct {
-	baseRuntime[TimeItem]
-	nextTime int64
+	*baseRuntime[TimeItem]
+	nextTime atomic.Int64
 }
 
-func (s TimeIndexRuntime) Time(ts int64) (int64, error) {
+func (s *TimeIndexRuntime) Time(ts int64) (int64, error) {
 	return Time(s.items, ts)
 }
