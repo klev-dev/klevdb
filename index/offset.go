@@ -8,7 +8,7 @@ import (
 
 var ErrIndexEmpty = fmt.Errorf("%w: no items", message.ErrInvalidOffset)
 
-func Consume[IT IndexItem](items []IT, offset int64) (int64, int64, error) {
+func Consume[IT Item](items []IT, offset int64) (int64, int64, error) {
 	if len(items) == 0 {
 		return 0, 0, ErrIndexEmpty
 	}
@@ -53,7 +53,7 @@ func Consume[IT IndexItem](items []IT, offset int64) (int64, int64, error) {
 	return items[beginIndex].Position(), endItem.Position(), nil
 }
 
-func Get[IT IndexItem](items []IT, offset int64) (int64, error) {
+func Get[IT Item](items []IT, offset int64) (int64, error) {
 	if len(items) == 0 {
 		return 0, ErrIndexEmpty
 	}

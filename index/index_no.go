@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 
 	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/kleverr"
 )
 
 type NoItem struct {
@@ -24,17 +23,17 @@ type NoIndex struct {
 	zero struct{}
 }
 
-var _ Index[NoItem, struct{}, *NoIndexStore] = NoIndex{}
+var _ Index[NoItem, struct{}, *NoIndexRuntime] = NoIndex{}
 
 func (ix NoIndex) Size() int64 {
 	return 8 + 8
 }
 
-func (ix NoIndex) NewContext() struct{} {
+func (ix NoIndex) NewState() struct{} {
 	return ix.zero
 }
 
-func (ix NoIndex) Context(o NoItem) struct{} {
+func (ix NoIndex) State(_ NoItem) struct{} {
 	return ix.zero
 }
 
@@ -52,51 +51,34 @@ func (ix NoIndex) Read(buff []byte) (NoItem, error) {
 	}, nil
 }
 
-func (ix NoIndex) Write(o NoItem, buff []byte) error {
-	binary.BigEndian.PutUint64(buff[0:], uint64(o.offset))
-	binary.BigEndian.PutUint64(buff[8:], uint64(o.position))
+func (ix NoIndex) Write(item NoItem, buff []byte) error {
+	binary.BigEndian.PutUint64(buff[0:], uint64(item.offset))
+	binary.BigEndian.PutUint64(buff[8:], uint64(item.position))
 
 	return nil
 }
 
-func (ix NoIndex) NewStore(items []NoItem) *NoIndexStore {
-	return &NoIndexStore{
-		items: items,
+func (ix NoIndex) NewRuntime(items []NoItem, nextOffset int64, _ struct{}) *NoIndexRuntime {
+	return &NoIndexRuntime{
+		baseRuntime: baseRuntime[NoItem]{
+			items:      items,
+			nextOffset: nextOffset,
+		},
 	}
 }
 
-func (ix NoIndex) Append(s *NoIndexStore, items []NoItem) {
+func (ix NoIndex) Append(s *NoIndexRuntime, items []NoItem) {
 	s.items = append(s.items, items...)
+}
+
+func (ix NoIndex) Next(s *NoIndexRuntime) (int64, struct{}) {
+	return s.nextOffset, ix.zero
 }
 
 func (ix NoIndex) Equal(l, r NoItem) bool {
 	return l == r
 }
 
-type NoIndexStore struct {
-	items []NoItem
-}
-
-func (s NoIndexStore) GetLastOffset() int64 {
-	return s.items[len(s.items)-1].Offset()
-}
-
-func (s NoIndexStore) Consume(offset int64) (int64, int64, error) {
-	return Consume(s.items, offset)
-}
-
-func (s NoIndexStore) Get(offset int64) (int64, error) {
-	return Get(s.items, offset)
-}
-
-func (s NoIndexStore) Keys(_ []byte) ([]int64, error) {
-	return nil, kleverr.Newf("%w by key", ErrNoIndex)
-}
-
-func (s NoIndexStore) Time(_ int64) (int64, error) {
-	return -1, kleverr.Newf("%w by time", ErrNoIndex)
-}
-
-func (s NoIndexStore) Len() int {
-	return len(s.items)
+type NoIndexRuntime struct {
+	baseRuntime[NoItem]
 }

@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 
 	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/kleverr"
 )
 
 type TimeItem struct {
@@ -28,18 +27,18 @@ func (o TimeItem) Timestamp() int64 {
 type TimeIndex struct {
 }
 
-var _ Index[TimeItem, int64, *TimeIndexStore] = TimeIndex{}
+var _ Index[TimeItem, int64, *TimeIndexRuntime] = TimeIndex{}
 
 func (ix TimeIndex) Size() int64 {
 	return 8 + 8 + 8
 }
 
-func (ix TimeIndex) NewContext() int64 {
+func (ix TimeIndex) NewState() int64 {
 	return 0
 }
 
-func (ix TimeIndex) Context(o TimeItem) int64 {
-	return o.timestamp
+func (ix TimeIndex) State(item TimeItem) int64 {
+	return item.timestamp
 }
 
 func (ix TimeIndex) New(m message.Message, position int64, ts int64) (TimeItem, int64, error) {
@@ -64,52 +63,41 @@ func (ix TimeIndex) Read(buff []byte) (TimeItem, error) {
 	}, nil
 }
 
-func (ix TimeIndex) Write(o TimeItem, buff []byte) error {
-	binary.BigEndian.PutUint64(buff[0:], uint64(o.offset))
-	binary.BigEndian.PutUint64(buff[8:], uint64(o.position))
-	binary.BigEndian.PutUint64(buff[16:], uint64(o.timestamp))
+func (ix TimeIndex) Write(item TimeItem, buff []byte) error {
+	binary.BigEndian.PutUint64(buff[0:], uint64(item.offset))
+	binary.BigEndian.PutUint64(buff[8:], uint64(item.position))
+	binary.BigEndian.PutUint64(buff[16:], uint64(item.timestamp))
 
 	return nil
 }
 
-func (ix TimeIndex) NewStore(items []TimeItem) *TimeIndexStore {
-	return &TimeIndexStore{
-		items: items,
+func (ix TimeIndex) NewRuntime(items []TimeItem, nextOffset int64, nextTime int64) *TimeIndexRuntime {
+	return &TimeIndexRuntime{
+		baseRuntime: baseRuntime[TimeItem]{
+			items:      items,
+			nextOffset: nextOffset,
+		},
+		nextTime: nextTime,
 	}
 }
 
-func (ix TimeIndex) Append(s *TimeIndexStore, items []TimeItem) {
+func (ix TimeIndex) Append(s *TimeIndexRuntime, items []TimeItem) {
 	s.items = append(s.items, items...)
+}
+
+func (ix TimeIndex) Next(s *TimeIndexRuntime) (int64, int64) {
+	return s.nextOffset, s.nextTime
 }
 
 func (ix TimeIndex) Equal(l, r TimeItem) bool {
 	return l == r
 }
 
-type TimeIndexStore struct {
-	items []TimeItem
+type TimeIndexRuntime struct {
+	baseRuntime[TimeItem]
+	nextTime int64
 }
 
-func (s TimeIndexStore) GetLastOffset() int64 {
-	return s.items[len(s.items)-1].Offset()
-}
-
-func (s TimeIndexStore) Consume(offset int64) (int64, int64, error) {
-	return Consume(s.items, offset)
-}
-
-func (s TimeIndexStore) Get(offset int64) (int64, error) {
-	return Get(s.items, offset)
-}
-
-func (s TimeIndexStore) Keys(_ []byte) ([]int64, error) {
-	return nil, kleverr.Newf("%w by key", ErrNoIndex)
-}
-
-func (s TimeIndexStore) Time(ts int64) (int64, error) {
+func (s TimeIndexRuntime) Time(ts int64) (int64, error) {
 	return Time(s.items, ts)
-}
-
-func (s TimeIndexStore) Len() int {
-	return len(s.items)
 }

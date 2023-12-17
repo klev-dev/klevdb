@@ -33,18 +33,18 @@ func (o TimeKeyItem) KeyHash() uint64 {
 type TimeKeyIndex struct {
 }
 
-var _ Index[TimeKeyItem, int64, *TimeKeyIndexStore] = TimeKeyIndex{}
+var _ Index[TimeKeyItem, int64, *TimeKeyIndexRuntime] = TimeKeyIndex{}
 
 func (ix TimeKeyIndex) Size() int64 {
 	return 8 + 8 + 8 + 8
 }
 
-func (ix TimeKeyIndex) NewContext() int64 {
+func (ix TimeKeyIndex) NewState() int64 {
 	return 0
 }
 
-func (ix TimeKeyIndex) Context(o TimeKeyItem) int64 {
-	return o.timestamp
+func (ix TimeKeyIndex) State(item TimeKeyItem) int64 {
+	return item.timestamp
 }
 
 func (ix TimeKeyIndex) New(m message.Message, position int64, ts int64) (TimeKeyItem, int64, error) {
@@ -71,58 +71,51 @@ func (ix TimeKeyIndex) Read(buff []byte) (TimeKeyItem, error) {
 	}, nil
 }
 
-func (ix TimeKeyIndex) Write(o TimeKeyItem, buff []byte) error {
-	binary.BigEndian.PutUint64(buff[0:], uint64(o.offset))
-	binary.BigEndian.PutUint64(buff[8:], uint64(o.position))
-	binary.BigEndian.PutUint64(buff[16:], uint64(o.timestamp))
-	binary.BigEndian.PutUint64(buff[24:], o.keyHash)
+func (ix TimeKeyIndex) Write(item TimeKeyItem, buff []byte) error {
+	binary.BigEndian.PutUint64(buff[0:], uint64(item.offset))
+	binary.BigEndian.PutUint64(buff[8:], uint64(item.position))
+	binary.BigEndian.PutUint64(buff[16:], uint64(item.timestamp))
+	binary.BigEndian.PutUint64(buff[24:], item.keyHash)
 
 	return nil
 }
 
-func (ix TimeKeyIndex) NewStore(items []TimeKeyItem) *TimeKeyIndexStore {
+func (ix TimeKeyIndex) NewRuntime(items []TimeKeyItem, nextOffset int64, nextTime int64) *TimeKeyIndexRuntime {
 	keys := art.New()
 	AppendKeys(keys, items)
-	return &TimeKeyIndexStore{
-		items: items,
-		keys:  keys,
+	return &TimeKeyIndexRuntime{
+		baseRuntime: baseRuntime[TimeKeyItem]{
+			items:      items,
+			nextOffset: nextOffset,
+		},
+		nextTime: nextTime,
+		keys:     keys,
 	}
 }
 
-func (ix TimeKeyIndex) Append(s *TimeKeyIndexStore, items []TimeKeyItem) {
+func (ix TimeKeyIndex) Append(s *TimeKeyIndexRuntime, items []TimeKeyItem) {
 	s.items = append(s.items, items...)
 	AppendKeys(s.keys, items)
+}
+
+func (ix TimeKeyIndex) Next(s *TimeKeyIndexRuntime) (int64, int64) {
+	return s.nextOffset, s.nextTime
 }
 
 func (ix TimeKeyIndex) Equal(l, r TimeKeyItem) bool {
 	return l == r
 }
 
-type TimeKeyIndexStore struct {
-	items []TimeKeyItem
-	keys  art.Tree
+type TimeKeyIndexRuntime struct {
+	baseRuntime[TimeKeyItem]
+	nextTime int64
+	keys     art.Tree
 }
 
-func (s TimeKeyIndexStore) GetLastOffset() int64 {
-	return s.items[len(s.items)-1].Offset()
-}
-
-func (s TimeKeyIndexStore) Consume(offset int64) (int64, int64, error) {
-	return Consume(s.items, offset)
-}
-
-func (s TimeKeyIndexStore) Get(offset int64) (int64, error) {
-	return Get(s.items, offset)
-}
-
-func (s TimeKeyIndexStore) Keys(hash []byte) ([]int64, error) {
+func (s TimeKeyIndexRuntime) Keys(hash []byte) ([]int64, error) {
 	return Keys(s.keys, hash)
 }
 
-func (s TimeKeyIndexStore) Time(ts int64) (int64, error) {
+func (s TimeKeyIndexRuntime) Time(ts int64) (int64, error) {
 	return Time(s.items, ts)
-}
-
-func (s TimeKeyIndexStore) Len() int {
-	return len(s.items)
 }

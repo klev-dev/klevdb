@@ -6,12 +6,12 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
-type TimeIndexedItem interface {
-	IndexItem
+type TimedItem interface {
+	Item
 	Timestamp() int64
 }
 
-func Time[IT TimeIndexedItem](items []IT, ts int64) (int64, error) {
+func Time[IT TimedItem](items []IT, ts int64) (int64, error) {
 	if len(items) == 0 {
 		return 0, ErrIndexEmpty
 	}

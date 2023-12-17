@@ -35,7 +35,7 @@ type timeKeyIndexSegment = Segment[
 	index.TimeKeyIndex,
 	index.TimeKeyItem,
 	int64,
-	*index.TimeKeyIndexStore,
+	*index.TimeKeyIndexRuntime,
 ]
 
 func TestRecover(t *testing.T) {
@@ -137,7 +137,7 @@ func TestRecover(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New[index.TimeKeyIndex, index.TimeKeyItem, int64, *index.TimeKeyIndexStore](t.TempDir(), 0)
+			seg := New[index.TimeKeyIndex, index.TimeKeyItem, int64, *index.TimeKeyIndexRuntime](t.TempDir(), 0)
 			writeMessages(t, seg, ix, test.in)
 
 			require.NoError(t, test.corrupt(seg))
@@ -220,24 +220,24 @@ func TestBackup(t *testing.T) {
 	}
 }
 
-func writeMessages[IX index.Index[IT, IC, IS], IT index.IndexItem, IC index.IndexContext, IS index.IndexStore](t *testing.T, seg Segment[IX, IT, IC, IS], ix IX, msgs []message.Message) {
+func writeMessages[IX index.Index[IT, IC, IS], IT index.Item, IC index.State, IS index.Runtime](t *testing.T, seg Segment[IX, IT, IC, IS], ix IX, msgs []message.Message) {
 	lw, err := message.OpenWriter(seg.Log)
 	require.NoError(t, err)
 	iw, err := index.OpenWriter(seg.Index, ix)
 	require.NoError(t, err)
 
-	var indexContext = ix.NewContext()
+	var state = ix.NewState()
 	for _, msg := range msgs {
 		pos, err := lw.Write(msg)
 		require.NoError(t, err)
 
-		item, nextContext, err := ix.New(msg, pos, indexContext)
+		item, nextState, err := ix.New(msg, pos, state)
 		require.NoError(t, err)
 
 		err = iw.Write(item)
 		require.NoError(t, err)
 
-		indexContext = nextContext
+		state = nextState
 	}
 
 	require.NoError(t, iw.Close())

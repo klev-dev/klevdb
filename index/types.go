@@ -8,30 +8,31 @@ import (
 
 var ErrNoIndex = errors.New("no index")
 
-type IndexItem interface {
+type Item interface {
 	Offset() int64
 	Position() int64
 }
 
-type IndexContext any
+type State any
 
-type Index[I IndexItem, C IndexContext, S IndexStore] interface {
+type Index[I Item, S State, R Runtime] interface {
 	Size() int64
 
-	NewContext() C
-	Context(o I) C
+	NewState() S
+	State(item I) S
 
-	New(msg message.Message, position int64, ctx C) (I, C, error)
-	Read(buff []byte) (I, error)
-	Write(o I, buff []byte) error
+	New(msg message.Message, position int64, state S) (item I, nextState S, err error)
+	Read(buff []byte) (item I, err error)
+	Write(item I, buff []byte) error
 
-	NewStore(items []I) S
-	Append(s S, items []I)
+	NewRuntime(items []I, nextOffset int64, nextState S) R
+	Append(run R, items []I)
+	Next(run R) (nextOffset int64, nextState S)
 
 	Equal(l, r I) bool
 }
 
-type IndexStore interface {
+type Runtime interface {
 	GetLastOffset() int64
 
 	Consume(offset int64) (int64, int64, error)

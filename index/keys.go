@@ -21,12 +21,12 @@ func KeyHashEncoded(h uint64) []byte {
 	return hash
 }
 
-type KeyIndexedItem interface {
-	IndexItem
+type KeyedItem interface {
+	Item
 	KeyHash() uint64
 }
 
-func AppendKeys[IT KeyIndexedItem](keys art.Tree, items []IT) {
+func AppendKeys[IT KeyedItem](keys art.Tree, items []IT) {
 	hash := make([]byte, 8)
 	for _, item := range items {
 		binary.BigEndian.PutUint64(hash, item.KeyHash())
