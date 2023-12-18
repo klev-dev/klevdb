@@ -129,84 +129,94 @@ func fillLog(b *testing.B, l Log) []Message {
 }
 
 func benchmarkConsume(b *testing.B) {
+	var cases = []struct {
+		name string
+		opts Options
+	}{
+		{"No", Options{}},
+		{"Times", Options{TimeIndex: true}},
+		{"Keys", Options{KeyIndex: true}},
+		{"All", Options{TimeIndex: true, KeyIndex: true}},
+	}
 	for _, bn := range []int{1, 8} {
 		bn := bn
+		for _, c := range cases {
+			b.Run(fmt.Sprintf("W/%s/%d", c.name, bn), func(b *testing.B) {
+				dir := MkdirBench(b)
+				defer os.RemoveAll(dir)
 
-		b.Run(fmt.Sprintf("W/%d", bn), func(b *testing.B) {
-			dir := MkdirBench(b)
-			defer os.RemoveAll(dir)
+				l, err := Open(dir, c.opts)
+				require.NoError(b, err)
+				defer l.Close()
 
-			l, err := Open(dir, Options{})
-			require.NoError(b, err)
-			defer l.Close()
+				msgs := fillLog(b, l)
 
-			msgs := fillLog(b, l)
+				b.SetBytes(l.Size(msgs[0]) * int64(bn))
+				b.ResetTimer()
 
-			b.SetBytes(l.Size(msgs[0]) * int64(bn))
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i += bn {
-				if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
-					b.Fatal(err)
+				for i := 0; i < b.N; i += bn {
+					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+						b.Fatal(err)
+					}
 				}
-			}
 
-			b.StopTimer()
-		})
+				b.StopTimer()
+			})
 
-		b.Run(fmt.Sprintf("RW/%d", bn), func(b *testing.B) {
-			dir := MkdirBench(b)
-			defer os.RemoveAll(dir)
+			b.Run(fmt.Sprintf("RW/%s/%d", c.name, bn), func(b *testing.B) {
+				dir := MkdirBench(b)
+				defer os.RemoveAll(dir)
 
-			l, err := Open(dir, Options{})
-			require.NoError(b, err)
-			defer l.Close()
+				l, err := Open(dir, c.opts)
+				require.NoError(b, err)
+				defer l.Close()
 
-			msgs := fillLog(b, l)
-			require.NoError(b, l.Close())
+				msgs := fillLog(b, l)
+				require.NoError(b, l.Close())
 
-			b.SetBytes(l.Size(msgs[0]) * int64(bn))
-			b.ResetTimer()
+				b.SetBytes(l.Size(msgs[0]) * int64(bn))
+				b.ResetTimer()
 
-			l, err = Open(dir, Options{})
-			require.NoError(b, err)
-			defer l.Close()
+				l, err = Open(dir, Options{})
+				require.NoError(b, err)
+				defer l.Close()
 
-			for i := 0; i < b.N; i += bn {
-				if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
-					b.Fatal(err)
+				for i := 0; i < b.N; i += bn {
+					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+						b.Fatal(err)
+					}
 				}
-			}
 
-			b.StopTimer()
-		})
+				b.StopTimer()
+			})
 
-		b.Run(fmt.Sprintf("R/%d", bn), func(b *testing.B) {
-			dir := MkdirBench(b)
-			defer os.RemoveAll(dir)
+			b.Run(fmt.Sprintf("R/%s/%d", c.name, bn), func(b *testing.B) {
+				dir := MkdirBench(b)
+				defer os.RemoveAll(dir)
 
-			l, err := Open(dir, Options{})
-			require.NoError(b, err)
-			defer l.Close()
+				l, err := Open(dir, c.opts)
+				require.NoError(b, err)
+				defer l.Close()
 
-			msgs := fillLog(b, l)
-			require.NoError(b, l.Close())
+				msgs := fillLog(b, l)
+				require.NoError(b, l.Close())
 
-			b.SetBytes(l.Size(msgs[0]) * int64(bn))
-			b.ResetTimer()
+				b.SetBytes(l.Size(msgs[0]) * int64(bn))
+				b.ResetTimer()
 
-			l, err = Open(dir, Options{Readonly: true})
-			require.NoError(b, err)
-			defer l.Close()
+				l, err = Open(dir, Options{Readonly: true})
+				require.NoError(b, err)
+				defer l.Close()
 
-			for i := 0; i < b.N; i += bn {
-				if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
-					b.Fatal(err)
+				for i := 0; i < b.N; i += bn {
+					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+						b.Fatal(err)
+					}
 				}
-			}
 
-			b.StopTimer()
-		})
+				b.StopTimer()
+			})
+		}
 	}
 }
 
