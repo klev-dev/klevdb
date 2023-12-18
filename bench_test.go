@@ -177,7 +177,7 @@ func benchmarkConsume(b *testing.B) {
 				b.SetBytes(l.Size(msgs[0]) * int64(bn))
 				b.ResetTimer()
 
-				l, err = Open(dir, Options{})
+				l, err = Open(dir, c.opts)
 				require.NoError(b, err)
 				defer l.Close()
 
@@ -204,7 +204,9 @@ func benchmarkConsume(b *testing.B) {
 				b.SetBytes(l.Size(msgs[0]) * int64(bn))
 				b.ResetTimer()
 
-				l, err = Open(dir, Options{Readonly: true})
+				opts := c.opts
+				opts.Readonly = true
+				l, err = Open(dir, opts)
 				require.NoError(b, err)
 				defer l.Close()
 
