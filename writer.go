@@ -298,7 +298,7 @@ func (ix *writerIndex) Get(offset int64) (int64, error) {
 	return position, err
 }
 
-func (ix *writerIndex) Keys(keyHash [8]byte) ([]int64, error) {
+func (ix *writerIndex) Keys(keyHash []byte) ([]int64, error) {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 

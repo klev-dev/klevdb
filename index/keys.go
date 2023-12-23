@@ -8,8 +8,8 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
-func KeyHash(key []byte) [8]byte {
-	var hash [8]byte
+func KeyHash(key []byte) []byte {
+	hash := make([]byte, 8)
 	hasher := fnv.New64a()
 	hasher.Write(key)
 	hasher.Sum(hash[:0])
@@ -30,8 +30,8 @@ func AppendKeys(keys art.Tree, items []Item) {
 	}
 }
 
-func Keys(keys art.Tree, keyHash [8]byte) ([]int64, error) {
-	if v, found := keys.Search(keyHash[:]); found {
+func Keys(keys art.Tree, keyHash []byte) ([]int64, error) {
+	if v, found := keys.Search(keyHash); found {
 		return v.([]int64), nil
 	}
 
