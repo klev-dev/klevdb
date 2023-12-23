@@ -53,7 +53,7 @@ func (w *Writer) Write(it Item) error {
 	}
 
 	if w.opts.Keys {
-		binary.BigEndian.PutUint64(w.buff[w.keyOffset:], it.KeyHash)
+		copy(w.buff[w.keyOffset:], it.KeyHash[:])
 	}
 
 	if n, err := w.f.Write(w.buff); err != nil {
@@ -146,7 +146,7 @@ func Read(path string, opts Params) ([]Item, error) {
 		}
 
 		if opts.Keys {
-			items[i].KeyHash = binary.BigEndian.Uint64(data[pos+keyOffset:])
+			copy(items[i].KeyHash[:], data[pos+keyOffset:])
 		}
 	}
 	return items, nil

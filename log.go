@@ -202,7 +202,7 @@ func (l *log) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []m
 		return OffsetInvalid, nil, kleverr.Newf("%w by key", ErrNoIndex)
 	}
 
-	hash := index.KeyHashEncoded(index.KeyHash(key))
+	hash := index.KeyHash(key)
 
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
@@ -243,7 +243,7 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 		return message.Invalid, kleverr.Newf("%w by key", ErrNoIndex)
 	}
 
-	hash := index.KeyHashEncoded(index.KeyHash(key))
+	hash := index.KeyHash(key)
 
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()

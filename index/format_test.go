@@ -1,6 +1,7 @@
 package index
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -17,7 +18,7 @@ func createIndex(dir string, itemCount int) (string, error) {
 		items[i].Offset = int64(i)
 		items[i].Position = int64(i)
 		items[i].Timestamp = int64(i)
-		items[i].KeyHash = uint64(i)
+		items[i].KeyHash = KeyHash([]byte(fmt.Sprintf("%d", i)))
 	}
 	filename := filepath.Join(dir, "index")
 	return filename, Write(filename, iopts, items)
@@ -37,6 +38,6 @@ func TestWriteRead(t *testing.T) {
 		require.Equal(t, int64(i), item.Offset)
 		require.Equal(t, int64(i), item.Position)
 		require.Equal(t, int64(i), item.Timestamp)
-		require.Equal(t, uint64(i), item.KeyHash)
+		require.Equal(t, KeyHash([]byte(fmt.Sprintf("%d", i))), item.KeyHash)
 	}
 }

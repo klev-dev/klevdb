@@ -28,7 +28,7 @@ type indexer interface {
 	GetNextOffset() (int64, error)
 	Consume(offset int64) (int64, int64, int64, error)
 	Get(offset int64) (int64, error)
-	Keys(hash []byte) ([]int64, error)
+	Keys(hash [8]byte) ([]int64, error)
 	Time(ts int64) (int64, error)
 	Len() int
 }
@@ -113,7 +113,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 	return msgs[len(msgs)-1].Offset + 1, msgs, nil
 }
 
-func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
+func (r *reader) ConsumeByKey(key []byte, keyHash [8]byte, offset, maxCount int64) (int64, []message.Message, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return OffsetInvalid, nil, err
@@ -191,7 +191,7 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 	return messages.Get(position)
 }
 
-func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
+func (r *reader) GetByKey(key []byte, keyHash [8]byte) (message.Message, error) {
 	index, err := r.getIndex()
 	if err != nil {
 		return message.Invalid, err
@@ -411,7 +411,7 @@ func (ix *readerIndex) Get(offset int64) (int64, error) {
 	return position, err
 }
 
-func (ix *readerIndex) Keys(keyHash []byte) ([]int64, error) {
+func (ix *readerIndex) Keys(keyHash [8]byte) ([]int64, error) {
 	return index.Keys(ix.keys, keyHash)
 }
 

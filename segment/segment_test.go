@@ -1,7 +1,6 @@
 package segment
 
 import (
-	"hash/fnv"
 	"os"
 	"testing"
 	"time"
@@ -232,22 +231,20 @@ func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []messag
 }
 
 func assertMessages(t *testing.T, seg Segment, params index.Params, expMsgs []message.Message) {
-	index, err := seg.ReindexAndReadIndex(params)
+	items, err := seg.ReindexAndReadIndex(params)
 	require.NoError(t, err)
-	require.Len(t, index, len(expMsgs))
+	require.Len(t, items, len(expMsgs))
 
 	lr, err := message.OpenReader(seg.Log)
 	require.NoError(t, err)
 
 	for i, expMsg := range expMsgs {
-		actIndex := index[i]
+		actIndex := items[i]
 
 		require.Equal(t, expMsg.Offset, actIndex.Offset)
 		require.Equal(t, expMsg.Time.UnixMicro(), actIndex.Timestamp)
 
-		hasher := fnv.New64a()
-		hasher.Write(expMsg.Key)
-		require.Equal(t, hasher.Sum64(), actIndex.KeyHash)
+		require.Equal(t, index.KeyHash(expMsg.Key), actIndex.KeyHash)
 
 		actMsg, err := lr.Get(actIndex.Position)
 		require.NoError(t, err)
