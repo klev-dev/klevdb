@@ -1,7 +1,9 @@
 package index
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 
 	"github.com/klev-dev/klevdb/message"
 )
@@ -37,20 +39,11 @@ func Consume(items []Item, offset int64) (int64, int64, error) {
 		return endItem.Position, endItem.Position, nil
 	}
 
-	for beginIndex <= endIndex {
-		midIndex := (beginIndex + endIndex) / 2
-		midItem := items[midIndex]
-		switch {
-		case midItem.Offset < offset:
-			beginIndex = midIndex + 1
-		case midItem.Offset > offset:
-			endIndex = midIndex - 1
-		default:
-			return midItem.Position, endItem.Position, nil
-		}
-	}
+	idx, _ := slices.BinarySearchFunc(items, offset, func(item Item, offset int64) int {
+		return cmp.Compare(item.Offset, offset)
+	})
 
-	return items[beginIndex].Position, endItem.Position, nil
+	return items[idx].Position, endItem.Position, nil
 }
 
 func Get(items []Item, offset int64) (int64, error) {
@@ -83,18 +76,13 @@ func Get(items []Item, offset int64) (int64, error) {
 		return endItem.Position, nil
 	}
 
-	for beginIndex <= endIndex {
-		midIndex := (beginIndex + endIndex) / 2
-		midItem := items[midIndex]
-		switch {
-		case midItem.Offset < offset:
-			beginIndex = midIndex + 1
-		case midItem.Offset > offset:
-			endIndex = midIndex - 1
-		default:
-			return midItem.Position, nil
-		}
+	idx, found := slices.BinarySearchFunc(items, offset, func(item Item, offset int64) int {
+		return cmp.Compare(item.Offset, offset)
+	})
+
+	if !found {
+		return 0, message.ErrNotFound
 	}
 
-	return 0, message.ErrNotFound
+	return items[idx].Position, nil
 }
