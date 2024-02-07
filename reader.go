@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	art "github.com/plar/go-adaptive-radix-tree"
 
@@ -17,11 +19,13 @@ type reader struct {
 	params  index.Params
 	head    bool
 
-	messages   *message.Reader
-	messagesMu sync.RWMutex
+	messages      *message.Reader
+	messagesMu    sync.RWMutex
+	messagesInuse int64
 
-	index   indexer
-	indexMu sync.RWMutex
+	index           indexer
+	indexMu         sync.RWMutex
+	indexLastAccess int64
 }
 
 type indexer interface {
@@ -105,6 +109,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	msgs, err := messages.Consume(position, maxPosition, maxCount)
 	if err != nil {
@@ -143,6 +148,7 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	var msgs []message.Message
 	for i := 0; i < len(positions); i++ {
@@ -187,6 +193,7 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 	if err != nil {
 		return message.Invalid, err
 	}
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	return messages.Get(position)
 }
@@ -206,6 +213,7 @@ func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
 	if err != nil {
 		return message.Invalid, err
 	}
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	for i := len(positions) - 1; i >= 0; i-- {
 		msg, err := messages.Get(positions[i])
@@ -235,6 +243,7 @@ func (r *reader) GetByTime(ts int64) (message.Message, error) {
 	if err != nil {
 		return message.Invalid, err
 	}
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	return messages.Get(position)
 }
@@ -288,9 +297,11 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 }
 
 func (r *reader) getIndex() (indexer, error) {
+	atomic.StoreInt64(&r.indexLastAccess, time.Now().UnixMicro())
+
 	r.indexMu.RLock()
 	if ix := r.index; ix != nil {
-		r.indexMu.RUnlock()
+		defer r.indexMu.RUnlock()
 		return ix, nil
 	}
 	r.indexMu.RUnlock()
@@ -314,6 +325,7 @@ func (r *reader) getIndex() (indexer, error) {
 func (r *reader) getMessages() (*message.Reader, error) {
 	r.messagesMu.RLock()
 	if msgs := r.messages; msgs != nil {
+		atomic.AddInt64(&r.messagesInuse, 1)
 		r.messagesMu.RUnlock()
 		return msgs, nil
 	}
@@ -323,6 +335,7 @@ func (r *reader) getMessages() (*message.Reader, error) {
 	defer r.messagesMu.Unlock()
 
 	if msgs := r.messages; msgs != nil {
+		atomic.AddInt64(&r.messagesInuse, 1)
 		return msgs, nil
 	}
 
@@ -332,14 +345,47 @@ func (r *reader) getMessages() (*message.Reader, error) {
 	}
 
 	r.messages = msgs
-	return r.messages, nil
+	atomic.AddInt64(&r.messagesInuse, 1)
+	return msgs, nil
 }
 
-func (r *reader) Close() error {
+func (r *reader) closeIndex() {
 	r.indexMu.Lock()
 	defer r.indexMu.Unlock()
 
 	r.index = nil
+}
+
+func (r *reader) GC(unusedFor time.Duration) error {
+	if r.head {
+		// we never GC an actively writing segment
+		return nil
+	}
+
+	indexLastAccess := time.UnixMicro(atomic.LoadInt64(&r.indexLastAccess))
+	if time.Since(indexLastAccess) < unusedFor {
+		// only unload segments unused for defined time
+		return nil
+	}
+
+	r.closeIndex()
+
+	r.messagesMu.Lock()
+	defer r.messagesMu.Unlock()
+
+	if r.messages == nil || atomic.LoadInt64(&r.messagesInuse) > 0 {
+		return nil
+	}
+
+	if err := r.messages.Close(); err != nil {
+		return err
+	}
+	r.messages = nil
+	return nil
+}
+
+func (r *reader) Close() error {
+	r.closeIndex()
 
 	r.messagesMu.Lock()
 	defer r.messagesMu.Unlock()
