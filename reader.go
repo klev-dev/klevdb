@@ -20,7 +20,7 @@ type reader struct {
 
 	messages      *message.Reader
 	messagesMu    sync.RWMutex
-	messagesInuse atomic.Int64
+	messagesInuse int64
 
 	index   indexer
 	indexMu sync.RWMutex
@@ -322,7 +322,8 @@ func (r *reader) getMessages() (*message.Reader, func(), error) {
 	r.messagesMu.RLock()
 	if msgs := r.messages; msgs != nil {
 		defer r.messagesMu.RUnlock()
-		return msgs, r.inuse(), nil
+		atomic.AddInt64(&r.messagesInuse, 1)
+		return msgs, r.releaseMessages, nil
 	}
 	r.messagesMu.RUnlock()
 
@@ -330,7 +331,8 @@ func (r *reader) getMessages() (*message.Reader, func(), error) {
 	defer r.messagesMu.Unlock()
 
 	if msgs := r.messages; msgs != nil {
-		return msgs, r.inuse(), nil
+		atomic.AddInt64(&r.messagesInuse, 1)
+		return msgs, r.releaseMessages, nil
 	}
 
 	msgs, err := message.OpenReaderMem(r.segment.Log)
@@ -339,14 +341,12 @@ func (r *reader) getMessages() (*message.Reader, func(), error) {
 	}
 
 	r.messages = msgs
-	return msgs, r.inuse(), nil
+	atomic.AddInt64(&r.messagesInuse, 1)
+	return msgs, r.releaseMessages, nil
 }
 
-func (r *reader) inuse() func() {
-	r.messagesInuse.Add(1)
-	return func() {
-		r.messagesInuse.Add(-1)
-	}
+func (r *reader) releaseMessages() {
+	atomic.AddInt64(&r.messagesInuse, -1)
 }
 
 func (r *reader) closeIndex() {
@@ -362,7 +362,7 @@ func (r *reader) GC() error {
 	r.messagesMu.Lock()
 	defer r.messagesMu.Unlock()
 
-	if r.messages == nil || r.messagesInuse.Load() > 0 {
+	if r.messages == nil || atomic.LoadInt64(&r.messagesInuse) > 0 {
 		return nil
 	}
 
