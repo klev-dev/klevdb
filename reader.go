@@ -103,11 +103,11 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 		return nextOffset, nil, nil
 	}
 
-	messages, release, err := r.getMessages()
+	messages, err := r.getMessages()
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
-	defer release()
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	msgs, err := messages.Consume(position, maxPosition, maxCount)
 	if err != nil {
@@ -142,11 +142,11 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 		return OffsetInvalid, nil, err
 	}
 
-	messages, release, err := r.getMessages()
+	messages, err := r.getMessages()
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
-	defer release()
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	var msgs []message.Message
 	for i := 0; i < len(positions); i++ {
@@ -187,11 +187,11 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 		return message.Invalid, err
 	}
 
-	messages, release, err := r.getMessages()
+	messages, err := r.getMessages()
 	if err != nil {
 		return message.Invalid, err
 	}
-	defer release()
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	return messages.Get(position)
 }
@@ -207,11 +207,11 @@ func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
 		return message.Invalid, err
 	}
 
-	messages, release, err := r.getMessages()
+	messages, err := r.getMessages()
 	if err != nil {
 		return message.Invalid, err
 	}
-	defer release()
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	for i := len(positions) - 1; i >= 0; i-- {
 		msg, err := messages.Get(positions[i])
@@ -237,11 +237,11 @@ func (r *reader) GetByTime(ts int64) (message.Message, error) {
 		return message.Invalid, err
 	}
 
-	messages, release, err := r.getMessages()
+	messages, err := r.getMessages()
 	if err != nil {
 		return message.Invalid, err
 	}
-	defer release()
+	defer atomic.AddInt64(&r.messagesInuse, -1)
 
 	return messages.Get(position)
 }
@@ -318,12 +318,12 @@ func (r *reader) getIndex() (indexer, error) {
 	return r.index, nil
 }
 
-func (r *reader) getMessages() (*message.Reader, func(), error) {
+func (r *reader) getMessages() (*message.Reader, error) {
 	r.messagesMu.RLock()
 	if msgs := r.messages; msgs != nil {
-		defer r.messagesMu.RUnlock()
 		atomic.AddInt64(&r.messagesInuse, 1)
-		return msgs, r.releaseMessages, nil
+		r.messagesMu.RUnlock()
+		return msgs, nil
 	}
 	r.messagesMu.RUnlock()
 
@@ -332,21 +332,17 @@ func (r *reader) getMessages() (*message.Reader, func(), error) {
 
 	if msgs := r.messages; msgs != nil {
 		atomic.AddInt64(&r.messagesInuse, 1)
-		return msgs, r.releaseMessages, nil
+		return msgs, nil
 	}
 
 	msgs, err := message.OpenReaderMem(r.segment.Log)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	r.messages = msgs
 	atomic.AddInt64(&r.messagesInuse, 1)
-	return msgs, r.releaseMessages, nil
-}
-
-func (r *reader) releaseMessages() {
-	atomic.AddInt64(&r.messagesInuse, -1)
+	return msgs, nil
 }
 
 func (r *reader) closeIndex() {
