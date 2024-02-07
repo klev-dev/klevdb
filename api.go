@@ -128,8 +128,8 @@ type Log interface {
 	// Sync forces persisting data to the disk
 	Sync() error
 
-	// GC releases any unnecessary resources assciated with this log
-	GC() error
+	// GC releases any unused resources associated with this log
+	GC(unusedFor time.Duration) error
 
 	// Close closes the log
 	Close() error

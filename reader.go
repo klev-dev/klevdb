@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	art "github.com/plar/go-adaptive-radix-tree"
 
@@ -22,8 +23,9 @@ type reader struct {
 	messagesMu    sync.RWMutex
 	messagesInuse int64
 
-	index   indexer
-	indexMu sync.RWMutex
+	index           indexer
+	indexMu         sync.RWMutex
+	indexLastAccess int64
 }
 
 type indexer interface {
@@ -295,6 +297,8 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 }
 
 func (r *reader) getIndex() (indexer, error) {
+	atomic.StoreInt64(&r.indexLastAccess, time.Now().UnixMicro())
+
 	r.indexMu.RLock()
 	if ix := r.index; ix != nil {
 		defer r.indexMu.RUnlock()
@@ -352,7 +356,18 @@ func (r *reader) closeIndex() {
 	r.index = nil
 }
 
-func (r *reader) GC() error {
+func (r *reader) GC(unusedFor time.Duration) error {
+	if r.head {
+		// we never GC an actively writing segment
+		return nil
+	}
+
+	indexLastAccess := time.UnixMicro(atomic.LoadInt64(&r.indexLastAccess))
+	if time.Since(indexLastAccess) < unusedFor {
+		// only unload segments unused for defined time
+		return nil
+	}
+
 	r.closeIndex()
 
 	r.messagesMu.Lock()

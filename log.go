@@ -484,12 +484,12 @@ func (l *log) Sync() error {
 	return l.writer.Sync()
 }
 
-func (l *log) GC() error {
+func (l *log) GC(unusedFor time.Duration) error {
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
-	for _, reader := range l.readers[:len(l.readers)-1] {
-		if err := reader.GC(); err != nil {
+	for _, reader := range l.readers {
+		if err := reader.GC(unusedFor); err != nil {
 			return err
 		}
 	}

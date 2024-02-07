@@ -200,7 +200,7 @@ func TestBasic(t *testing.T) {
 	})
 
 	t.Run("GC", func(t *testing.T) {
-		err := l.GC()
+		err := l.GC(0)
 		require.NoError(t, err)
 
 		coff, cmsgs, err = l.Consume(0, 3)
@@ -1681,7 +1681,7 @@ func testConcurrentGC(t *testing.T) {
 
 	g.Go(func() error {
 		for ctx.Err() == nil {
-			if err := l.GC(); err != nil {
+			if err := l.GC(0); err != nil {
 				return err
 			}
 			time.Sleep(time.Millisecond)
