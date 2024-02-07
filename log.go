@@ -484,6 +484,19 @@ func (l *log) Sync() error {
 	return l.writer.Sync()
 }
 
+func (l *log) GC() error {
+	l.readersMu.RLock()
+	defer l.readersMu.RUnlock()
+
+	for _, reader := range l.readers[:len(l.readers)-1] {
+		if err := reader.GC(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (l *log) Close() error {
 	if l.opts.Readonly {
 		l.readersMu.Lock()

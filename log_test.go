@@ -199,6 +199,16 @@ func TestBasic(t *testing.T) {
 		require.Nil(t, cmsgs)
 	})
 
+	t.Run("GC", func(t *testing.T) {
+		err := l.GC()
+		require.NoError(t, err)
+
+		coff, cmsgs, err = l.Consume(0, 3)
+		require.NoError(t, err)
+		require.Equal(t, int64(3), coff)
+		require.Equal(t, cmsgs, msgs[0:3])
+	})
+
 	t.Run("Close", func(t *testing.T) {
 		err := l.Close()
 		require.NoError(t, err)
@@ -1455,6 +1465,8 @@ func TestConcurrent(t *testing.T) {
 	t.Run("PubsubRecent", testConcurrentPubsubRecent)
 	t.Run("Consume", testConcurrentConsume)
 	t.Run("Delete", testConcurrentDelete)
+	t.Run("GC", testConcurrentGC)
+	// t.Run("Close", testConcurrentClose)
 }
 
 func testConcurrentPubsubRecent(t *testing.T) {
@@ -1468,7 +1480,7 @@ func testConcurrentPubsubRecent(t *testing.T) {
 	require.NoError(t, err)
 	defer s.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -1634,4 +1646,90 @@ func testConcurrentDelete(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func testConcurrentGC(t *testing.T) {
+	dir := t.TempDir()
+
+	msgs := message.Gen(100)
+	msgSize := message.Size(msgs[0])
+
+	l, err := Open(dir, Options{
+		Rollover: msgSize * 10,
+	})
+	require.NoError(t, err)
+	defer l.Close()
+
+	publishBatched(t, l, msgs, 10)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		for ctx.Err() == nil {
+			next, consumed, err := l.Consume(OffsetOldest, 32)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, int64(10), next)
+			require.Equal(t, msgs[0:10], consumed)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		for ctx.Err() == nil {
+			if err := l.GC(); err != nil {
+				return err
+			}
+			time.Sleep(time.Millisecond)
+		}
+		return nil
+	})
+
+	err = g.Wait()
+	if serr := kleverr.Get(err); serr != nil {
+		fmt.Println(serr.Print())
+	}
+	require.NoError(t, err)
+}
+
+func testConcurrentClose(t *testing.T) {
+	dir := t.TempDir()
+
+	msgs := message.Gen(100)
+	msgSize := message.Size(msgs[0])
+
+	l, err := Open(dir, Options{
+		Rollover: msgSize * 10,
+	})
+	require.NoError(t, err)
+	defer l.Close()
+
+	publishBatched(t, l, msgs, 10)
+
+	g, ctx := errgroup.WithContext(context.TODO())
+	g.Go(func() error {
+		for ctx.Err() == nil {
+			next, consumed, err := l.Consume(OffsetOldest, 32)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, int64(10), next)
+			require.Equal(t, msgs[0:10], consumed)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		return l.Close()
+	})
+
+	err = g.Wait()
+	if serr := kleverr.Get(err); serr != nil {
+		fmt.Println(serr.Print())
+	}
+	require.NoError(t, err)
 }

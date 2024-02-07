@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	art "github.com/plar/go-adaptive-radix-tree"
 
@@ -17,8 +18,9 @@ type reader struct {
 	params  index.Params
 	head    bool
 
-	messages   *message.Reader
-	messagesMu sync.RWMutex
+	messages      *message.Reader
+	messagesMu    sync.RWMutex
+	messagesInuse atomic.Int64
 
 	index   indexer
 	indexMu sync.RWMutex
@@ -101,10 +103,11 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 		return nextOffset, nil, nil
 	}
 
-	messages, err := r.getMessages()
+	messages, release, err := r.getMessages()
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
+	defer release()
 
 	msgs, err := messages.Consume(position, maxPosition, maxCount)
 	if err != nil {
@@ -139,10 +142,11 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 		return OffsetInvalid, nil, err
 	}
 
-	messages, err := r.getMessages()
+	messages, release, err := r.getMessages()
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
+	defer release()
 
 	var msgs []message.Message
 	for i := 0; i < len(positions); i++ {
@@ -183,10 +187,11 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 		return message.Invalid, err
 	}
 
-	messages, err := r.getMessages()
+	messages, release, err := r.getMessages()
 	if err != nil {
 		return message.Invalid, err
 	}
+	defer release()
 
 	return messages.Get(position)
 }
@@ -202,10 +207,11 @@ func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
 		return message.Invalid, err
 	}
 
-	messages, err := r.getMessages()
+	messages, release, err := r.getMessages()
 	if err != nil {
 		return message.Invalid, err
 	}
+	defer release()
 
 	for i := len(positions) - 1; i >= 0; i-- {
 		msg, err := messages.Get(positions[i])
@@ -231,10 +237,11 @@ func (r *reader) GetByTime(ts int64) (message.Message, error) {
 		return message.Invalid, err
 	}
 
-	messages, err := r.getMessages()
+	messages, release, err := r.getMessages()
 	if err != nil {
 		return message.Invalid, err
 	}
+	defer release()
 
 	return messages.Get(position)
 }
@@ -290,7 +297,7 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 func (r *reader) getIndex() (indexer, error) {
 	r.indexMu.RLock()
 	if ix := r.index; ix != nil {
-		r.indexMu.RUnlock()
+		defer r.indexMu.RUnlock()
 		return ix, nil
 	}
 	r.indexMu.RUnlock()
@@ -311,11 +318,11 @@ func (r *reader) getIndex() (indexer, error) {
 	return r.index, nil
 }
 
-func (r *reader) getMessages() (*message.Reader, error) {
+func (r *reader) getMessages() (*message.Reader, func(), error) {
 	r.messagesMu.RLock()
 	if msgs := r.messages; msgs != nil {
-		r.messagesMu.RUnlock()
-		return msgs, nil
+		defer r.messagesMu.RUnlock()
+		return msgs, r.inuse(), nil
 	}
 	r.messagesMu.RUnlock()
 
@@ -323,23 +330,51 @@ func (r *reader) getMessages() (*message.Reader, error) {
 	defer r.messagesMu.Unlock()
 
 	if msgs := r.messages; msgs != nil {
-		return msgs, nil
+		return msgs, r.inuse(), nil
 	}
 
 	msgs, err := message.OpenReaderMem(r.segment.Log)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	r.messages = msgs
-	return r.messages, nil
+	return msgs, r.inuse(), nil
 }
 
-func (r *reader) Close() error {
+func (r *reader) inuse() func() {
+	r.messagesInuse.Add(1)
+	return func() {
+		r.messagesInuse.Add(-1)
+	}
+}
+
+func (r *reader) closeIndex() {
 	r.indexMu.Lock()
 	defer r.indexMu.Unlock()
 
 	r.index = nil
+}
+
+func (r *reader) GC() error {
+	r.closeIndex()
+
+	r.messagesMu.Lock()
+	defer r.messagesMu.Unlock()
+
+	if r.messages == nil || r.messagesInuse.Load() > 0 {
+		return nil
+	}
+
+	if err := r.messages.Close(); err != nil {
+		return err
+	}
+	r.messages = nil
+	return nil
+}
+
+func (r *reader) Close() error {
+	r.closeIndex()
 
 	r.messagesMu.Lock()
 	defer r.messagesMu.Unlock()
