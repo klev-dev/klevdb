@@ -125,8 +125,10 @@ type Log interface {
 	// Backup takes a backup snapshot of this log to another location
 	Backup(dir string) error
 
-	// Sync forces persisting data to the disk
-	Sync() (int64, error)
+	// Sync forces persisting data to the disk. It returns the nextOffset
+	// at the time of the Sync, so clients can determine what portion
+	// of the log is now durable.
+	Sync() (nextOffset int64, err error)
 
 	// GC releases any unused resources associated with this log
 	GC(unusedFor time.Duration) error
