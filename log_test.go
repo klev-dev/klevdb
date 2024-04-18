@@ -667,8 +667,9 @@ func testReadonlyEmpty(t *testing.T) {
 	err = l.Backup(t.TempDir())
 	require.NoError(t, err)
 
-	err = l.Sync()
+	noff, err = l.Sync()
 	require.NoError(t, err)
+	require.Equal(t, int64(0), noff)
 
 	err = l.Close()
 	require.NoError(t, err)
@@ -773,8 +774,9 @@ func testReadonlySegment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, stat, bstat)
 
-	err = l.Sync()
+	noff, err = l.Sync()
 	require.NoError(t, err)
+	require.Equal(t, int64(4), noff)
 
 	err = l.Close()
 	require.NoError(t, err)
@@ -880,8 +882,9 @@ func testReadonlySegments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, stat, bstat)
 
-	err = l.Sync()
+	noff, err = l.Sync()
 	require.NoError(t, err)
+	require.Equal(t, int64(4), noff)
 
 	err = l.Close()
 	require.NoError(t, err)

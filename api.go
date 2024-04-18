@@ -126,7 +126,7 @@ type Log interface {
 	Backup(dir string) error
 
 	// Sync forces persisting data to the disk
-	Sync() error
+	Sync() (int64, error)
 
 	// GC releases any unused resources associated with this log
 	GC(unusedFor time.Duration) error

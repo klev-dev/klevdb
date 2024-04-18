@@ -473,15 +473,22 @@ func (l *log) Backup(dir string) error {
 	return nil
 }
 
-func (l *log) Sync() error {
+func (l *log) Sync() (int64, error) {
 	if l.opts.Readonly {
-		return nil
+		l.readersMu.RLock()
+		defer l.readersMu.RUnlock()
+
+		rdr := l.readers[len(l.readers)-1]
+		return rdr.GetNextOffset()
 	}
 
 	l.writerMu.Lock()
 	defer l.writerMu.Unlock()
 
-	return l.writer.Sync()
+	if err := l.writer.Sync(); err != nil {
+		return OffsetInvalid, nil
+	}
+	return l.writer.GetNextOffset()
 }
 
 func (l *log) GC(unusedFor time.Duration) error {
