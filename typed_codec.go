@@ -39,3 +39,43 @@ func (c JsonCodec[T]) DecodeOpt(b []byte) (T, bool, error) {
 	err := json.Unmarshal(b, &t)
 	return t, true, err
 }
+
+type stringCodec struct{}
+
+func (c stringCodec) Encode(t string) ([]byte, error) {
+	return []byte(t), nil
+}
+
+func (c stringCodec) Decode(b []byte) (string, error) {
+	return string(b), nil
+}
+
+func (c stringCodec) EncodeOpt(t string, has bool) ([]byte, error) {
+	if has {
+		return json.Marshal(t)
+	}
+	return nil, nil
+}
+
+func (c stringCodec) DecodeOpt(b []byte) (string, bool, error) {
+	if b == nil {
+		return "", false, nil
+	}
+	var s string
+	err := json.Unmarshal(b, &s)
+	return s, true, err
+}
+
+var StringCodec = stringCodec{}
+
+type stringBareCodec struct{}
+
+func (c stringBareCodec) EncodeOpt(t string, has bool) ([]byte, error) {
+	return []byte(t), nil
+}
+
+func (c stringBareCodec) DecodeOpt(b []byte) (string, bool, error) {
+	return string(b), true, nil
+}
+
+var StringBareCodec = stringBareCodec{}
