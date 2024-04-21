@@ -197,7 +197,7 @@ func (l *log) Consume(offset int64, opts *ConsumeOptions) (int64, []message.Mess
 	return nextOffset, msgs, err
 }
 
-func (l *log) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []message.Message, error) {
+func (l *log) ConsumeByKey(key []byte, offset int64, opts *ConsumeOptions) (int64, []message.Message, error) {
 	if !l.opts.KeyIndex {
 		return OffsetInvalid, nil, kleverr.Newf("%w by key", ErrNoIndex)
 	}
@@ -209,7 +209,7 @@ func (l *log) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []m
 
 	rdr, index := segment.Consume(l.readers, offset)
 	for {
-		nextOffset, msgs, err := rdr.ConsumeByKey(key, hash, offset, maxCount)
+		nextOffset, msgs, err := rdr.ConsumeByKey(key, hash, offset, opts.MaxMessages)
 		if err != nil {
 			return nextOffset, msgs, err
 		}

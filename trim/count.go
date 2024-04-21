@@ -6,6 +6,8 @@ import (
 	"github.com/klev-dev/klevdb"
 )
 
+var countOptions = &klevdb.ConsumeOptions{MaxMessages: 32}
+
 // FindByCount returns a set of offsets for messages that when
 // removed will keep number of the messages in the log less then max
 func FindByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}, error) {
@@ -26,7 +28,7 @@ func FindByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}
 
 	toRemove := stats.Messages - max
 	for offset := klevdb.OffsetOldest; offset < maxOffset && toRemove > 0; {
-		nextOffset, msgs, err := l.Consume(offset, 32)
+		nextOffset, msgs, err := l.Consume(offset, countOptions)
 		if err != nil {
 			return nil, err
 		}

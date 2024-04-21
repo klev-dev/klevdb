@@ -8,6 +8,8 @@ import (
 	"github.com/klev-dev/klevdb"
 )
 
+var ageOptions = &klevdb.ConsumeOptions{MaxMessages: 32}
+
 // FindByAge returns a set of offsets for messages that are
 // at the start of the log and before given time.
 func FindByAge(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, error) {
@@ -39,7 +41,7 @@ func FindByAge(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]s
 
 SEARCH:
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
-		nextOffset, msgs, err := l.Consume(offset, 32)
+		nextOffset, msgs, err := l.Consume(offset, ageOptions)
 		if err != nil {
 			return nil, err
 		}

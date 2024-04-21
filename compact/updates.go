@@ -9,6 +9,8 @@ import (
 	"github.com/klev-dev/klevdb"
 )
 
+var updatesOptions = &klevdb.ConsumeOptions{MaxMessages: 32}
+
 // FindUpdates returns a set of offsets for messages that have
 // the same key further in the log, before a given time.
 //
@@ -25,7 +27,7 @@ func FindUpdates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64
 
 SEARCH:
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
-		nextOffset, msgs, err := l.Consume(offset, 32)
+		nextOffset, msgs, err := l.Consume(offset, updatesOptions)
 		if err != nil {
 			return nil, err
 		}

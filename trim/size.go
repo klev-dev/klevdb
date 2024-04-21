@@ -6,6 +6,8 @@ import (
 	"github.com/klev-dev/klevdb"
 )
 
+var sizeOptions = &klevdb.ConsumeOptions{MaxMessages: 32}
+
 // FindBySize returns a set of offsets for messages that
 // if deleted will decrease the log size to sz
 func FindBySize(ctx context.Context, l klevdb.Log, sz int64) (map[int64]struct{}, error) {
@@ -26,7 +28,7 @@ func FindBySize(ctx context.Context, l klevdb.Log, sz int64) (map[int64]struct{}
 
 	total := stats.Size
 	for offset := klevdb.OffsetOldest; offset < maxOffset && total >= sz; {
-		nextOffset, msgs, err := l.Consume(offset, 32)
+		nextOffset, msgs, err := l.Consume(offset, sizeOptions)
 		if err != nil {
 			return nil, err
 		}

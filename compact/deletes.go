@@ -9,6 +9,8 @@ import (
 	"github.com/klev-dev/klevdb"
 )
 
+var deletesOptions = &klevdb.ConsumeOptions{MaxMessages: 32}
+
 // FindDeletes returns a set of offsets for messages with
 // nil value for a given key, before a given time.
 //
@@ -25,7 +27,7 @@ func FindDeletes(ctx context.Context, l klevdb.Log, before time.Time) (map[int64
 
 SEARCH:
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
-		nextOffset, msgs, err := l.Consume(offset, 32)
+		nextOffset, msgs, err := l.Consume(offset, deletesOptions)
 		if err != nil {
 			return nil, err
 		}

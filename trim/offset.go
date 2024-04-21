@@ -7,6 +7,8 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
+var offsetOptions = &klevdb.ConsumeOptions{MaxMessages: 32}
+
 // FindByOffset returns a set of offsets for messages that
 // offset is before a given offset
 func FindByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct{}, error) {
@@ -26,7 +28,7 @@ func FindByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]st
 
 	var offsets = map[int64]struct{}{}
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
-		nextOffset, msgs, err := l.Consume(offset, 32)
+		nextOffset, msgs, err := l.Consume(offset, offsetOptions)
 		if err != nil {
 			return nil, err
 		}

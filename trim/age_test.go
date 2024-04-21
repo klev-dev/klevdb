@@ -80,7 +80,7 @@ func testByAgeAll(t *testing.T) {
 	require.Len(t, off, 20)
 	require.Equal(t, l.Size(msgs[0])*20, sz)
 
-	coff, cmsgs, err := l.Consume(klevdb.OffsetOldest, 32)
+	coff, cmsgs, err := l.Consume(klevdb.OffsetOldest, ageOptions)
 	require.NoError(t, err)
 	require.Equal(t, int64(20), coff)
 	require.Empty(t, cmsgs)
