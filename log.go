@@ -179,18 +179,23 @@ func (l *log) NextOffset() (int64, error) {
 	return l.writer.GetNextOffset()
 }
 
-func (l *log) Consume(offset int64, maxCount int64) (int64, []message.Message, error) {
+func (l *log) Consume(offset int64, options ...ConsumeOption) (int64, []message.Message, error) {
+	opts := ConsumeOptions{MaxMessages: 32, Blocking: false}
+	for _, o := range options {
+		o.Apply(&opts)
+	}
+
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
 	rdr, index := segment.Consume(l.readers, offset)
 
-	nextOffset, msgs, err := rdr.Consume(offset, maxCount)
+	nextOffset, msgs, err := rdr.Consume(offset, opts.MaxMessages)
 	if err != nil && err == message.ErrInvalidOffset {
 		if index < len(l.readers)-1 {
 			// this is after the end, consume starting the next one
 			next := l.readers[index+1]
-			return next.Consume(message.OffsetOldest, maxCount)
+			return next.Consume(message.OffsetOldest, opts.MaxMessages)
 		}
 	}
 
