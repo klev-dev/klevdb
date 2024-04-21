@@ -16,9 +16,9 @@ type TLog[K any, V any] interface {
 
 	NextOffset() (nextOffset int64, err error)
 
-	Consume(offset int64, options ...ConsumeOption) (nextOffset int64, messages []TMessage[K, V], err error)
+	Consume(offset int64, maxCount int64) (nextOffset int64, messages []TMessage[K, V], err error)
 
-	ConsumeByKey(key K, empty bool, offset int64, options ...ConsumeOption) (nextOffset int64, messages []TMessage[K, V], err error)
+	ConsumeByKey(key K, empty bool, offset int64, maxCount int64) (nextOffset int64, messages []TMessage[K, V], err error)
 
 	Get(offset int64) (message TMessage[K, V], err error)
 
@@ -69,8 +69,8 @@ func (l *tlog[K, V]) Publish(tmessages []TMessage[K, V]) (int64, error) {
 	return l.Log.Publish(messages)
 }
 
-func (l *tlog[K, V]) Consume(offset int64, options ...ConsumeOption) (int64, []TMessage[K, V], error) {
-	nextOffset, messages, err := l.Log.Consume(offset, options...)
+func (l *tlog[K, V]) Consume(offset int64, maxCount int64) (int64, []TMessage[K, V], error) {
+	nextOffset, messages, err := l.Log.Consume(offset, maxCount)
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
@@ -88,13 +88,13 @@ func (l *tlog[K, V]) Consume(offset int64, options ...ConsumeOption) (int64, []T
 	return nextOffset, tmessages, nil
 }
 
-func (l *tlog[K, V]) ConsumeByKey(key K, empty bool, offset int64, options ...ConsumeOption) (int64, []TMessage[K, V], error) {
+func (l *tlog[K, V]) ConsumeByKey(key K, empty bool, offset int64, maxCount int64) (int64, []TMessage[K, V], error) {
 	kbytes, err := l.keyCodec.Encode(key, empty)
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
 
-	nextOffset, messages, err := l.Log.ConsumeByKey(kbytes, offset, options...)
+	nextOffset, messages, err := l.Log.ConsumeByKey(kbytes, offset, maxCount)
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
