@@ -6,57 +6,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKV(t *testing.T) {
-	dir := t.TempDir()
-	l, err := OpenKV[string, string](dir, Options{}, StringCodec, StringCodec)
-	require.NoError(t, err)
-
-	_, err = l.Publish([]KVMessage[string, string]{
-		{
-			Key:      "hello",
-			HasValue: true,
-			Value:    "world",
-		},
-		{
-			Key: "hello again",
-		},
-		{
-			Key:      "hello more",
-			HasValue: true,
-		},
-	})
-	require.NoError(t, err)
-
-	_, msgs, err := l.Consume(OffsetOldest, 3)
-	require.NoError(t, err)
-
-	require.Equal(t, "hello", msgs[0].Key)
-	require.True(t, msgs[0].HasValue)
-	require.Equal(t, "world", msgs[0].Value)
-
-	require.Equal(t, "hello again", msgs[1].Key)
-	require.False(t, msgs[1].HasValue)
-	require.Equal(t, "", msgs[1].Value)
-
-	require.Equal(t, "hello more", msgs[2].Key)
-	require.True(t, msgs[2].HasValue)
-	require.Equal(t, "", msgs[2].Value)
+type tobj struct {
+	V string `json:"v"`
 }
 
-func TestV(t *testing.T) {
+func TestKV(t *testing.T) {
 	dir := t.TempDir()
-	l, err := OpenV[string](dir, Options{}, StringCodec)
+	l, err := OpenT[tobj, tobj](dir, Options{}, JsonCodec[tobj]{}, JsonCodec[tobj]{})
 	require.NoError(t, err)
 
-	_, err = l.Publish([]VMessage[string]{
+	_, err = l.Publish([]TMessage[tobj, tobj]{
 		{
-			Value: "world",
+			Key:   tobj{"hello"},
+			Value: tobj{"world"},
+		},
+		{
+			Key:      tobj{"hello"},
+			KeyEmpty: true,
+			Value:    tobj{"world"},
+		},
+		{
+			Key:        tobj{"hello"},
+			Value:      tobj{"world"},
+			ValueEmpty: true,
+		},
+		{
+			Key:        tobj{"hello"},
+			KeyEmpty:   true,
+			Value:      tobj{"world"},
+			ValueEmpty: true,
 		},
 	})
 	require.NoError(t, err)
 
-	_, msgs, err := l.Consume(OffsetOldest, 1)
+	_, msgs, err := l.Consume(OffsetOldest, 4)
 	require.NoError(t, err)
 
-	require.Equal(t, "world", msgs[0].Value)
+	require.Equal(t, tobj{"hello"}, msgs[0].Key)
+	require.False(t, msgs[0].KeyEmpty)
+	require.Equal(t, tobj{"world"}, msgs[0].Value)
+	require.False(t, msgs[0].ValueEmpty)
+
+	require.Equal(t, tobj{""}, msgs[1].Key)
+	require.True(t, msgs[1].KeyEmpty)
+	require.Equal(t, tobj{"world"}, msgs[1].Value)
+	require.False(t, msgs[1].ValueEmpty)
+
+	require.Equal(t, tobj{"hello"}, msgs[2].Key)
+	require.False(t, msgs[2].KeyEmpty)
+	require.Equal(t, tobj{""}, msgs[2].Value)
+	require.True(t, msgs[2].ValueEmpty)
+
+	require.Equal(t, tobj{""}, msgs[3].Key)
+	require.True(t, msgs[3].KeyEmpty)
+	require.Equal(t, tobj{""}, msgs[3].Value)
+	require.True(t, msgs[3].ValueEmpty)
 }
