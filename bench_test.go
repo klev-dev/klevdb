@@ -150,12 +150,13 @@ func benchmarkConsume(b *testing.B) {
 				defer l.Close()
 
 				msgs := fillLog(b, l)
+				copts := &ConsumeOptions{MaxMessages: int64(bn)}
 
 				b.SetBytes(l.Size(msgs[0]) * int64(bn))
 				b.ResetTimer()
 
 				for i := 0; i < b.N; i += bn {
-					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+					if _, _, err := l.Consume(int64(i), copts); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -172,6 +173,7 @@ func benchmarkConsume(b *testing.B) {
 				defer l.Close()
 
 				msgs := fillLog(b, l)
+				copts := &ConsumeOptions{MaxMessages: int64(bn)}
 				require.NoError(b, l.Close())
 
 				b.SetBytes(l.Size(msgs[0]) * int64(bn))
@@ -182,7 +184,7 @@ func benchmarkConsume(b *testing.B) {
 				defer l.Close()
 
 				for i := 0; i < b.N; i += bn {
-					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+					if _, _, err := l.Consume(int64(i), copts); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -199,6 +201,7 @@ func benchmarkConsume(b *testing.B) {
 				defer l.Close()
 
 				msgs := fillLog(b, l)
+				copts := &ConsumeOptions{MaxMessages: int64(bn)}
 				require.NoError(b, l.Close())
 
 				b.SetBytes(l.Size(msgs[0]) * int64(bn))
@@ -211,7 +214,7 @@ func benchmarkConsume(b *testing.B) {
 				defer l.Close()
 
 				for i := 0; i < b.N; i += bn {
-					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
+					if _, _, err := l.Consume(int64(i), copts); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -236,6 +239,7 @@ func benchmarkConsumeMulti(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+	copts := &ConsumeOptions{MaxMessages: 4}
 
 	b.SetBytes(s.Size(msgs[0]) * 4)
 	b.ResetTimer()
@@ -246,7 +250,7 @@ func benchmarkConsumeMulti(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < b.N; i += 4 {
-				if _, _, err := s.Consume(int64(i), 4); err != nil {
+				if _, _, err := s.Consume(int64(i), copts); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -427,6 +431,7 @@ func benchmarkBaseMulti(b *testing.B) {
 	defer s.Close()
 
 	msgs := message.Gen(b.N)
+	copts := &ConsumeOptions{MaxMessages: 10}
 
 	b.ResetTimer()
 
@@ -451,7 +456,7 @@ func benchmarkBaseMulti(b *testing.B) {
 
 		offset := OffsetOldest
 		for offset < int64(len(msgs)) {
-			next, _, err := s.Consume(offset, 10)
+			next, _, err := s.Consume(offset, copts)
 			require.NoError(b, err)
 			offset = next
 		}

@@ -82,7 +82,7 @@ type Log interface {
 	//   in case messages between offset and nextOffset have been deleted.
 	// NextOffset is always bigger then offset, unless we are caught up
 	//   to the head of the log in which case they are equal.
-	Consume(offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
+	Consume(offset int64, opts *ConsumeOptions) (nextOffset int64, messages []Message, err error)
 
 	// ConsumeByKey is similar to Consume, but only returns messages matching the key
 	ConsumeByKey(key []byte, offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
