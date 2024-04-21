@@ -155,7 +155,7 @@ func benchmarkConsume(b *testing.B) {
 				b.ResetTimer()
 
 				for i := 0; i < b.N; i += bn {
-					if _, _, err := l.Consume(int64(i), ConsumeMaxMessages(int64(bn))); err != nil {
+					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -182,7 +182,7 @@ func benchmarkConsume(b *testing.B) {
 				defer l.Close()
 
 				for i := 0; i < b.N; i += bn {
-					if _, _, err := l.Consume(int64(i), ConsumeMaxMessages(int64(bn))); err != nil {
+					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -211,7 +211,7 @@ func benchmarkConsume(b *testing.B) {
 				defer l.Close()
 
 				for i := 0; i < b.N; i += bn {
-					if _, _, err := l.Consume(int64(i), ConsumeMaxMessages(int64(bn))); err != nil {
+					if _, _, err := l.Consume(int64(i), int64(bn)); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -246,7 +246,7 @@ func benchmarkConsumeMulti(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < b.N; i += 4 {
-				if _, _, err := s.Consume(int64(i), ConsumeMaxMessages(4)); err != nil {
+				if _, _, err := s.Consume(int64(i), 4); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -451,7 +451,7 @@ func benchmarkBaseMulti(b *testing.B) {
 
 		offset := OffsetOldest
 		for offset < int64(len(msgs)) {
-			next, _, err := s.Consume(offset, ConsumeMaxMessages(10))
+			next, _, err := s.Consume(offset, 10)
 			require.NoError(b, err)
 			offset = next
 		}

@@ -60,24 +60,24 @@ func TestBasic(t *testing.T) {
 	var cmsgs []Message
 
 	t.Run("EmptyRelative", func(t *testing.T) {
-		coff, cmsgs, err = l.Consume(OffsetOldest, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(OffsetOldest, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), coff)
 		require.Nil(t, cmsgs)
 
-		coff, cmsgs, err = l.Consume(OffsetNewest, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(OffsetNewest, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), coff)
 		require.Nil(t, cmsgs)
 	})
 
 	t.Run("EmptyAbsolute", func(t *testing.T) {
-		coff, cmsgs, err = l.Consume(0, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(0, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), coff)
 		require.Nil(t, cmsgs)
 
-		coff, cmsgs, err = l.Consume(1, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(1, 10)
 		require.ErrorIs(t, err, ErrInvalidOffset)
 		require.Equal(t, OffsetInvalid, coff)
 		require.Nil(t, cmsgs)
@@ -116,34 +116,34 @@ func TestBasic(t *testing.T) {
 	})
 
 	t.Run("Relative", func(t *testing.T) {
-		coff, cmsgs, err = l.Consume(OffsetOldest, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(OffsetOldest, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Equal(t, msgs[0:3], cmsgs)
 
-		coff, cmsgs, err = l.Consume(OffsetNewest, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(OffsetNewest, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Nil(t, cmsgs)
 	})
 
 	t.Run("Absolute", func(t *testing.T) {
-		coff, cmsgs, err = l.Consume(0, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(0, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Equal(t, msgs[0:3], cmsgs)
 
-		coff, cmsgs, err = l.Consume(2, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(2, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Equal(t, msgs[2:3], cmsgs)
 
-		coff, cmsgs, err = l.Consume(3, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(3, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Nil(t, cmsgs)
 
-		coff, cmsgs, err = l.Consume(4, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(4, 10)
 		require.ErrorIs(t, err, ErrInvalidOffset)
 		require.Equal(t, OffsetInvalid, coff)
 		require.Nil(t, cmsgs)
@@ -166,34 +166,34 @@ func TestBasic(t *testing.T) {
 	})
 
 	t.Run("RolloverRelative", func(t *testing.T) {
-		coff, cmsgs, err = l.Consume(OffsetOldest, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(OffsetOldest, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Equal(t, msgs[0:3], cmsgs)
 
-		coff, cmsgs, err = l.Consume(OffsetNewest, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(OffsetNewest, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(6), coff)
 		require.Nil(t, cmsgs)
 	})
 
 	t.Run("RolloverAbsolute", func(t *testing.T) {
-		coff, cmsgs, err = l.Consume(0, ConsumeMaxMessages(3))
+		coff, cmsgs, err = l.Consume(0, 3)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Equal(t, cmsgs, msgs[0:3])
 
-		coff, cmsgs, err = l.Consume(coff, ConsumeMaxMessages(3))
+		coff, cmsgs, err = l.Consume(coff, 3)
 		require.NoError(t, err)
 		require.Equal(t, int64(6), coff)
 		require.Equal(t, cmsgs, msgs[3:])
 
-		coff, cmsgs, err = l.Consume(coff, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(coff, 10)
 		require.NoError(t, err)
 		require.Equal(t, int64(6), coff)
 		require.Nil(t, cmsgs)
 
-		coff, cmsgs, err = l.Consume(coff+1, ConsumeMaxMessages(10))
+		coff, cmsgs, err = l.Consume(coff+1, 10)
 		require.ErrorIs(t, err, ErrInvalidOffset)
 		require.Equal(t, OffsetInvalid, coff)
 		require.Nil(t, cmsgs)
@@ -203,7 +203,7 @@ func TestBasic(t *testing.T) {
 		err := l.GC(0)
 		require.NoError(t, err)
 
-		coff, cmsgs, err = l.Consume(0, ConsumeMaxMessages(3))
+		coff, cmsgs, err = l.Consume(0, 3)
 		require.NoError(t, err)
 		require.Equal(t, int64(3), coff)
 		require.Equal(t, cmsgs, msgs[0:3])
@@ -289,7 +289,7 @@ func TestByKey(t *testing.T) {
 		require.ErrorIs(t, err, ErrNoIndex)
 		require.Equal(t, OffsetInvalid, ooff)
 
-		coff, cmsgs, err := l.ConsumeByKey([]byte("key"), OffsetOldest, ConsumeMaxMessages(32))
+		coff, cmsgs, err := l.ConsumeByKey([]byte("key"), OffsetOldest, 32)
 		require.ErrorIs(t, err, ErrNoIndex)
 		require.Equal(t, OffsetInvalid, coff)
 		require.Nil(t, cmsgs)
@@ -312,7 +312,7 @@ func TestByKey(t *testing.T) {
 		require.ErrorIs(t, err, ErrNotFound)
 		require.Equal(t, OffsetInvalid, ooff)
 
-		coff, cmsgs, err := l.ConsumeByKey(msgs[0].Key, OffsetOldest, ConsumeMaxMessages(32))
+		coff, cmsgs, err := l.ConsumeByKey(msgs[0].Key, OffsetOldest, 32)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), coff)
 		require.Nil(t, cmsgs)
@@ -330,14 +330,14 @@ func TestByKey(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, msg.Offset, ooff)
 
-			coff, cmsgs, err := l.ConsumeByKey(msg.Key, OffsetOldest, ConsumeMaxMessages(32))
+			coff, cmsgs, err := l.ConsumeByKey(msg.Key, OffsetOldest, 32)
 			require.NoError(t, err)
 			require.Equal(t, int64(i+1), coff)
 			require.Len(t, cmsgs, 1)
 			require.Equal(t, msg, cmsgs[0])
 
 			// another search would return empty
-			coff, cmsgs, err = l.ConsumeByKey(msg.Key, coff, ConsumeMaxMessages(32))
+			coff, cmsgs, err = l.ConsumeByKey(msg.Key, coff, 32)
 			require.NoError(t, err)
 			require.Equal(t, int64(4), coff)
 			require.Nil(t, cmsgs)
@@ -345,7 +345,7 @@ func TestByKey(t *testing.T) {
 	})
 
 	t.Run("After", func(t *testing.T) {
-		coff, cmsgs, err := l.ConsumeByKey(msgs[0].Key, msgs[1].Offset, ConsumeMaxMessages(32))
+		coff, cmsgs, err := l.ConsumeByKey(msgs[0].Key, msgs[1].Offset, 32)
 		require.NoError(t, err)
 		require.Equal(t, int64(4), coff)
 		require.Nil(t, cmsgs)
@@ -360,7 +360,7 @@ func TestByKey(t *testing.T) {
 		require.ErrorIs(t, err, ErrNotFound)
 		require.Equal(t, OffsetInvalid, ooff)
 
-		coff, cmsgs, err := l.ConsumeByKey([]byte("key"), OffsetOldest, ConsumeMaxMessages(32))
+		coff, cmsgs, err := l.ConsumeByKey([]byte("key"), OffsetOldest, 32)
 		require.NoError(t, err)
 		require.Equal(t, int64(4), coff)
 		require.Nil(t, cmsgs)
@@ -385,13 +385,13 @@ func TestByKey(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, nmsgs[i].Offset, ooff)
 
-			coff, cmsgs, err := l.ConsumeByKey(msgs[i].Key, OffsetOldest, ConsumeMaxMessages(32))
+			coff, cmsgs, err := l.ConsumeByKey(msgs[i].Key, OffsetOldest, 32)
 			require.NoError(t, err)
 			require.Equal(t, int64(i+1), coff)
 			require.Len(t, cmsgs, 1)
 			require.Equal(t, msgs[i], cmsgs[0])
 
-			coff, cmsgs, err = l.ConsumeByKey(msgs[i].Key, coff, ConsumeMaxMessages(32))
+			coff, cmsgs, err = l.ConsumeByKey(msgs[i].Key, coff, 32)
 			require.NoError(t, err)
 			require.Equal(t, int64(len(msgs)+i+1), coff)
 			require.Len(t, cmsgs, 1)
@@ -540,7 +540,7 @@ func testReopenSegment(t *testing.T) {
 	require.NoError(t, err)
 	defer l.Close()
 
-	coff, cmsgs, err := l.Consume(OffsetOldest, ConsumeMaxMessages(4))
+	coff, cmsgs, err := l.Consume(OffsetOldest, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(len(msgs)), coff)
 	require.Equal(t, msgs, cmsgs)
@@ -574,12 +574,12 @@ func testReopenSegments(t *testing.T) {
 	require.NoError(t, err)
 	defer l.Close()
 
-	coff, cmsgs, err := l.Consume(OffsetOldest, ConsumeMaxMessages(4))
+	coff, cmsgs, err := l.Consume(OffsetOldest, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), coff)
 	require.Equal(t, msgs[0:2], cmsgs)
 
-	coff, cmsgs, err = l.Consume(coff, ConsumeMaxMessages(4))
+	coff, cmsgs, err = l.Consume(coff, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Equal(t, msgs[2:], cmsgs)
@@ -617,22 +617,22 @@ func testReadonlyEmpty(t *testing.T) {
 	require.ErrorIs(t, err, ErrReadonly)
 
 	// Consume checks
-	coff, cmsgs, err := l.Consume(OffsetOldest, ConsumeMaxMessages(1))
+	coff, cmsgs, err := l.Consume(OffsetOldest, 1)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(OffsetNewest, ConsumeMaxMessages(1))
+	coff, cmsgs, err = l.Consume(OffsetNewest, 1)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(0, ConsumeMaxMessages(1))
+	coff, cmsgs, err = l.Consume(0, 1)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(1, ConsumeMaxMessages(1))
+	coff, cmsgs, err = l.Consume(1, 1)
 	require.ErrorIs(t, err, ErrInvalidOffset)
 	require.Equal(t, OffsetInvalid, coff)
 	require.Empty(t, cmsgs)
@@ -709,27 +709,27 @@ func testReadonlySegment(t *testing.T) {
 	require.ErrorIs(t, err, ErrReadonly)
 
 	// Consume checks
-	coff, cmsgs, err := l.Consume(OffsetOldest, ConsumeMaxMessages(4))
+	coff, cmsgs, err := l.Consume(OffsetOldest, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Equal(t, msgs, cmsgs)
 
-	coff, cmsgs, err = l.Consume(OffsetNewest, ConsumeMaxMessages(4))
+	coff, cmsgs, err = l.Consume(OffsetNewest, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(0, ConsumeMaxMessages(1))
+	coff, cmsgs, err = l.Consume(0, 1)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), coff)
 	require.Equal(t, msgs[0:1], cmsgs)
 
-	coff, cmsgs, err = l.Consume(4, ConsumeMaxMessages(4))
+	coff, cmsgs, err = l.Consume(4, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(5, ConsumeMaxMessages(1))
+	coff, cmsgs, err = l.Consume(5, 1)
 	require.ErrorIs(t, err, ErrInvalidOffset)
 	require.Equal(t, OffsetInvalid, coff)
 	require.Empty(t, cmsgs)
@@ -817,27 +817,27 @@ func testReadonlySegments(t *testing.T) {
 	require.ErrorIs(t, err, ErrReadonly)
 
 	// Consume checks
-	coff, cmsgs, err := l.Consume(OffsetOldest, ConsumeMaxMessages(4))
+	coff, cmsgs, err := l.Consume(OffsetOldest, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), coff)
 	require.Equal(t, msgs[0:2], cmsgs)
 
-	coff, cmsgs, err = l.Consume(OffsetNewest, ConsumeMaxMessages(4))
+	coff, cmsgs, err = l.Consume(OffsetNewest, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(2, ConsumeMaxMessages(4))
+	coff, cmsgs, err = l.Consume(2, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Equal(t, msgs[2:], cmsgs)
 
-	coff, cmsgs, err = l.Consume(4, ConsumeMaxMessages(4))
+	coff, cmsgs, err = l.Consume(4, 4)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(5, ConsumeMaxMessages(1))
+	coff, cmsgs, err = l.Consume(5, 1)
 	require.ErrorIs(t, err, ErrInvalidOffset)
 	require.Equal(t, OffsetInvalid, coff)
 	require.Empty(t, cmsgs)
@@ -971,10 +971,10 @@ func testBackupSegment(t *testing.T) {
 
 	startOffset := OffsetOldest
 	for {
-		coff, cmsgs, err := l.Consume(startOffset, ConsumeMaxMessages(1))
+		coff, cmsgs, err := l.Consume(startOffset, 1)
 		require.NoError(t, err)
 
-		boff, bmsgs, err := bl.Consume(startOffset, ConsumeMaxMessages(1))
+		boff, bmsgs, err := bl.Consume(startOffset, 1)
 		require.NoError(t, err)
 
 		require.Equal(t, coff, boff)
@@ -1013,10 +1013,10 @@ func testBackupSegments(t *testing.T) {
 
 	startOffset := OffsetOldest
 	for {
-		coff, cmsgs, err := l.Consume(startOffset, ConsumeMaxMessages(1))
+		coff, cmsgs, err := l.Consume(startOffset, 1)
 		require.NoError(t, err)
 
-		boff, bmsgs, err := bl.Consume(startOffset, ConsumeMaxMessages(1))
+		boff, bmsgs, err := bl.Consume(startOffset, 1)
 		require.NoError(t, err)
 
 		require.Equal(t, coff, boff)
@@ -1062,12 +1062,12 @@ func TestReindex(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	coff, cmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	coff, cmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), coff)
 	require.Equal(t, msgs[0:2], cmsgs)
 
-	coff, cmsgs, err = l.Consume(coff, ConsumeMaxMessages(32))
+	coff, cmsgs, err = l.Consume(coff, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Equal(t, msgs[2:], cmsgs)
@@ -1119,7 +1119,7 @@ func testDeleteReaderPartial(t *testing.T) {
 	require.Equal(t, 3, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	doff, dmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	doff, dmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), doff)
 	require.Equal(t, msgs[1], dmsgs[0])
@@ -1172,7 +1172,7 @@ func testDeleteReaderPartialReload(t *testing.T) {
 	require.Equal(t, 3, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	doff, dmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	doff, dmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), doff)
 	require.Equal(t, msgs[1], dmsgs[0])
@@ -1217,7 +1217,7 @@ func testDeleteReaderFull(t *testing.T) {
 	require.Equal(t, 2, stats.Messages)
 	require.Equal(t, 1, stats.Segments)
 
-	doff, dmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	doff, dmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), doff)
 	require.Equal(t, msgs[2:], dmsgs)
@@ -1256,12 +1256,12 @@ func testDeleteWriterSingle(t *testing.T) {
 	require.Equal(t, 2, stats.Messages)
 	require.Equal(t, 1, stats.Segments)
 
-	doff, dmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	doff, dmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), doff)
 	require.Equal(t, msgs[2:4], dmsgs)
 
-	doff, dmsgs, err = l.Consume(1, ConsumeMaxMessages(32))
+	doff, dmsgs, err = l.Consume(1, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), doff)
 	require.Equal(t, msgs[2:4], dmsgs)
@@ -1342,12 +1342,12 @@ func testDeleteWriterPartial(t *testing.T) {
 	require.Equal(t, 3, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	doff, dmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	doff, dmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), doff)
 	require.Equal(t, msgs[0:2], dmsgs)
 
-	doff, dmsgs, err = l.Consume(2, ConsumeMaxMessages(32))
+	doff, dmsgs, err = l.Consume(2, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), doff)
 	require.Equal(t, msgs[3:], dmsgs)
@@ -1389,12 +1389,12 @@ func testDeleteWriterFull(t *testing.T) {
 	require.Equal(t, 2, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	doff, dmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	doff, dmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), doff)
 	require.Equal(t, msgs[0:2], dmsgs)
 
-	doff, dmsgs, err = l.Consume(2, ConsumeMaxMessages(32))
+	doff, dmsgs, err = l.Consume(2, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), doff)
 	require.Empty(t, dmsgs)
@@ -1403,7 +1403,7 @@ func testDeleteWriterFull(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(6), poff)
 
-	doff, dmsgs, err = l.Consume(2, ConsumeMaxMessages(32))
+	doff, dmsgs, err = l.Consume(2, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(6), doff)
 	require.Equal(t, msgs[2:], dmsgs)
@@ -1449,12 +1449,12 @@ func testDeleteAll(t *testing.T) {
 	require.Equal(t, 0, stats.Messages)
 	require.Equal(t, 1, stats.Segments)
 
-	coff, cmsgs, err := l.Consume(message.OffsetOldest, ConsumeMaxMessages(32))
+	coff, cmsgs, err := l.Consume(message.OffsetOldest, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Empty(t, cmsgs)
 
-	coff, cmsgs, err = l.Consume(1, ConsumeMaxMessages(32))
+	coff, cmsgs, err = l.Consume(1, 32)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), coff)
 	require.Empty(t, cmsgs)
@@ -1504,7 +1504,7 @@ func testConcurrentPubsubRecent(t *testing.T) {
 	g.Go(func() error {
 		var offset = OffsetOldest
 		for ctx.Err() == nil {
-			next, msgs, err := s.Consume(offset, ConsumeMaxMessages(32))
+			next, msgs, err := s.Consume(offset, 32)
 			if err != nil {
 				return kleverr.Newf("could not consume offset %d: %w", offset, err)
 			}
@@ -1524,7 +1524,7 @@ func testConcurrentPubsubRecent(t *testing.T) {
 
 	g.Go(func() error {
 		for ctx.Err() == nil {
-			_, msgs, err := s.Consume(OffsetOldest, ConsumeMaxMessages(32))
+			_, msgs, err := s.Consume(OffsetOldest, 32)
 			if err != nil {
 				return err
 			}
@@ -1576,7 +1576,7 @@ func testConcurrentConsume(t *testing.T) {
 
 			offset := OffsetOldest
 			for offset < 30000 {
-				next, _, err := s.Consume(offset, ConsumeMaxMessages(1))
+				next, _, err := s.Consume(offset, 1)
 				require.NoError(t, err)
 				offset = next
 			}
@@ -1629,7 +1629,7 @@ func testConcurrentDelete(t *testing.T) {
 		defer wg.Done()
 
 		for !t.Failed() {
-			next, msgs, err := s.Consume(OffsetOldest, ConsumeMaxMessages(10))
+			next, msgs, err := s.Consume(OffsetOldest, 10)
 			require.NoError(t, err)
 			offsets := make(map[int64]struct{})
 			for _, msg := range msgs {
@@ -1672,7 +1672,7 @@ func testConcurrentGC(t *testing.T) {
 
 	g.Go(func() error {
 		for ctx.Err() == nil {
-			next, consumed, err := l.Consume(OffsetOldest, ConsumeMaxMessages(32))
+			next, consumed, err := l.Consume(OffsetOldest, 32)
 			if err != nil {
 				return err
 			}
@@ -1716,7 +1716,7 @@ func testConcurrentClose(t *testing.T) {
 	g, ctx := errgroup.WithContext(context.TODO())
 	g.Go(func() error {
 		for ctx.Err() == nil {
-			next, consumed, err := l.Consume(OffsetOldest, ConsumeMaxMessages(32))
+			next, consumed, err := l.Consume(OffsetOldest, 32)
 			if err != nil {
 				return err
 			}

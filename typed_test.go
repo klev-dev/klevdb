@@ -39,7 +39,7 @@ func TestKV(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, msgs, err := l.Consume(OffsetOldest, ConsumeMaxMessages(4))
+	_, msgs, err := l.Consume(OffsetOldest, 4)
 	require.NoError(t, err)
 
 	require.Equal(t, tobj{"hello"}, msgs[0].Key)
