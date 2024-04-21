@@ -137,16 +137,18 @@ func OpenReaderMem(path string) (*Reader, error) {
 }
 
 func (r *Reader) Consume(position, maxPosition int64, maxCount int64) ([]Message, error) {
-	var msgs []Message
+	var msgs = make([]Message, 0, int(maxCount))
 	for int64(len(msgs)) < maxCount && position <= maxPosition {
 		msg, next, err := r.Read(position)
-		if errors.Is(err, io.EOF) {
-			break
-		} else if err != nil {
+		switch {
+		case err == nil:
+			msgs = append(msgs, msg)
+			position = next
+		case errors.Is(err, io.EOF):
+			return msgs, nil
+		default:
 			return nil, err
 		}
-		msgs = append(msgs, msg)
-		position = next
 	}
 	return msgs, nil
 }
@@ -158,24 +160,24 @@ func (r *Reader) Get(position int64) (Message, error) {
 
 var retReadErr = kleverr.Ret2[Message, int64]
 
-func (r *Reader) Read(position int64) (Message, int64, error) {
-	var err error
-
-	var headerBytes = make([]byte, 8+8+4+4+4)
+func (r *Reader) Read(position int64) (msg Message, nextPosition int64, err error) {
+	var headerBytes [8 + 8 + 4 + 4 + 4]byte
 	if r.ra != nil {
-		_, err = r.ra.ReadAt(headerBytes, position)
+		_, err = r.ra.ReadAt(headerBytes[:], position)
 	} else {
-		_, err = r.r.ReadAt(headerBytes, position)
+		_, err = r.r.ReadAt(headerBytes[:], position)
 	}
 	switch {
+	case err == nil:
+		// all good, continue
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return retReadErr(kleverr.Newf("%w: short header", ErrCorrupted))
-	case err != nil:
+	default:
 		return retReadErr(kleverr.Newf("could not read header: %w", err))
 	}
 
-	offset := int64(binary.BigEndian.Uint64(headerBytes[0:]))
-	ts := time.UnixMicro(int64(binary.BigEndian.Uint64(headerBytes[8:]))).UTC()
+	msg.Offset = int64(binary.BigEndian.Uint64(headerBytes[0:]))
+	msg.Time = time.UnixMicro(int64(binary.BigEndian.Uint64(headerBytes[8:]))).UTC()
 	keySize := int32(binary.BigEndian.Uint32(headerBytes[16:]))
 	valueSize := int32(binary.BigEndian.Uint32(headerBytes[20:]))
 	expectedCRC := binary.BigEndian.Uint32(headerBytes[24:])
@@ -188,11 +190,13 @@ func (r *Reader) Read(position int64) (Message, int64, error) {
 		_, err = r.r.ReadAt(messageBytes, position)
 	}
 	switch {
+	case err == nil:
+		// all good, continue
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return retReadErr(kleverr.Newf("%w: short message", ErrCorrupted))
 	case errors.Is(err, io.EOF):
 		return retReadErr(kleverr.Newf("%w: no message", ErrCorrupted))
-	case err != nil:
+	default:
 		return retReadErr(kleverr.Newf("could not read message: %w", err))
 	}
 
@@ -201,7 +205,6 @@ func (r *Reader) Read(position int64) (Message, int64, error) {
 		return retReadErr(kleverr.Newf("%w: invalid crc: expected=%d; actual=%d", ErrCorrupted, expectedCRC, actualCRC))
 	}
 
-	var msg = Message{Offset: offset, Time: ts}
 	if keySize > 0 {
 		msg.Key = messageBytes[:keySize]
 	}
