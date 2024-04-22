@@ -49,6 +49,10 @@ func OpenT[K any, V any](dir string, opts Options, keyCodec Codec[K], valueCodec
 	return &tlog[K, V]{l, keyCodec, valueCodec}, nil
 }
 
+func WrapT[K any, V any](l Log, keyCodec Codec[K], valueCodec Codec[V]) (TLog[K, V], error) {
+	return &tlog[K, V]{l, keyCodec, valueCodec}, nil
+}
+
 type tlog[K any, V any] struct {
 	Log
 
