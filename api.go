@@ -39,23 +39,6 @@ var ErrReadonly = errors.New("log opened in readonly mode")
 
 type Stats = segment.Stats
 
-type Options struct {
-	// When set will try to create all directories
-	CreateDirs bool
-	// Open the store in readonly mode
-	Readonly bool
-	// Index message keys, enabling GetByKey and OffsetByKey
-	KeyIndex bool
-	// Index message times, enabling GetByTime and OffsetByTime
-	TimeIndex bool
-	// Force filesystem sync after each Publish
-	AutoSync bool
-	// At what segment size it will rollover to a new segment. Defaults to 1mb.
-	Rollover int64
-	// Check the head segment for integrity, before opening it for reading/writing.
-	Check bool
-}
-
 type Log interface {
 	// Publish appends messages to the log.
 	// It returns the offset of the next message to be appended.

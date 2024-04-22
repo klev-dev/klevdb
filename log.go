@@ -180,6 +180,17 @@ func (l *log) NextOffset() (int64, error) {
 }
 
 func (l *log) Consume(offset int64, opts *ConsumeOptions) (int64, []message.Message, error) {
+	if opts == nil {
+		opts = &l.opts.DefaultConsume
+	} else {
+		if opts.MaxMessages == 0 {
+			opts.MaxMessages = l.opts.DefaultConsume.MaxMessages
+		}
+		if opts.Blocking == nil {
+			opts.Blocking = l.opts.DefaultConsume.Blocking
+		}
+	}
+
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
@@ -200,6 +211,17 @@ func (l *log) Consume(offset int64, opts *ConsumeOptions) (int64, []message.Mess
 func (l *log) ConsumeByKey(key []byte, offset int64, opts *ConsumeOptions) (int64, []message.Message, error) {
 	if !l.opts.KeyIndex {
 		return OffsetInvalid, nil, kleverr.Newf("%w by key", ErrNoIndex)
+	}
+
+	if opts == nil {
+		opts = &l.opts.DefaultConsume
+	} else {
+		if opts.MaxMessages == 0 {
+			opts.MaxMessages = l.opts.DefaultConsume.MaxMessages
+		}
+		if opts.Blocking == nil {
+			opts.Blocking = l.opts.DefaultConsume.Blocking
+		}
 	}
 
 	hash := index.KeyHashEncoded(index.KeyHash(key))
