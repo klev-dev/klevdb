@@ -58,4 +58,36 @@ func TestNotify(t *testing.T) {
 		cancel()
 		wg.Wait()
 	})
+
+	t.Run("close", func(t *testing.T) {
+		n := NewOffsetNotify(10)
+		ch := make(chan struct{})
+		var wg sync.WaitGroup
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			close(ch)
+
+			err := n.Wait(context.TODO(), 15)
+			require.NoError(t, err)
+		}()
+
+		<-ch
+		time.Sleep(10 * time.Millisecond)
+		n.Close()
+		wg.Wait()
+	})
+
+	t.Run("close_err", func(t *testing.T) {
+		n := NewOffsetNotify(10)
+		err := n.Close()
+		require.NoError(t, err)
+
+		err = n.Wait(context.TODO(), 15)
+		require.ErrorIs(t, err, ErrOffsetNotifyClosed)
+
+		err = n.Close()
+		require.ErrorIs(t, err, ErrOffsetNotifyClosed)
+	})
 }

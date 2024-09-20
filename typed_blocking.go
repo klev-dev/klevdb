@@ -50,3 +50,10 @@ func (l *tlogBlocking[K, V]) ConsumeByKeyBlocking(ctx context.Context, key K, em
 	}
 	return l.TLog.ConsumeByKey(key, empty, offset, maxCount)
 }
+
+func (l *tlogBlocking[K, V]) Close() error {
+	if err := l.notify.Close(); err != nil {
+		return err
+	}
+	return l.TLog.Close()
+}

@@ -2,10 +2,13 @@ package klevdb
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 
 	"github.com/klev-dev/kleverr"
 )
+
+var ErrOffsetNotifyClosed = errors.New("offset notify already closed")
 
 type OffsetNotify struct {
 	nextOffset atomic.Int64
@@ -30,7 +33,11 @@ func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
 	}
 
 	// acquire current barrier
-	b := <-w.barrier
+	b, ok := <-w.barrier
+	if !ok {
+		// already closed, return error
+		return kleverr.Ret(ErrOffsetNotifyClosed)
+	}
 
 	// probe the current offset
 	updated := w.nextOffset.Load() > offset
@@ -54,16 +61,37 @@ func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
 
 func (w *OffsetNotify) Set(nextOffset int64) {
 	// acquire current barrier
-	b := <-w.barrier
+	b, ok := <-w.barrier
+	if !ok {
+		// already closed
+		return
+	}
 
 	// set the new offset
 	if w.nextOffset.Load() < nextOffset {
 		w.nextOffset.Store(nextOffset)
 	}
 
-	// close the current barrier, e.g. broadcast update
+	// close the current barrier, e.g. broadcasting update
 	close(b)
 
 	// create new barrier
 	w.barrier <- make(chan struct{})
+}
+
+func (w *OffsetNotify) Close() error {
+	// acquire current barrier
+	b, ok := <-w.barrier
+	if !ok {
+		// already closed, return an error
+		return kleverr.Ret(ErrOffsetNotifyClosed)
+	}
+
+	// close the current barrier, e.g. broadcasting update
+	close(b)
+
+	// close the barrier channel, completing process
+	close(w.barrier)
+
+	return nil
 }

@@ -52,3 +52,10 @@ func (l *blockingLog) ConsumeByKeyBlocking(ctx context.Context, key []byte, offs
 	}
 	return l.Log.ConsumeByKey(key, offset, maxCount)
 }
+
+func (l *blockingLog) Close() error {
+	if err := l.notify.Close(); err != nil {
+		return err
+	}
+	return l.Log.Close()
+}
