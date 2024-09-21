@@ -11,6 +11,7 @@ type TMessage[K any, V any] struct {
 	ValueEmpty bool
 }
 
+// TLog is a typed log
 type TLog[K any, V any] interface {
 	Publish(messages []TMessage[K, V]) (nextOffset int64, err error)
 
@@ -39,6 +40,8 @@ type TLog[K any, V any] interface {
 	GC(unusedFor time.Duration) error
 
 	Close() error
+
+	Raw() Log
 }
 
 func OpenT[K any, V any](dir string, opts Options, keyCodec Codec[K], valueCodec Codec[V]) (TLog[K, V], error) {
@@ -142,6 +145,10 @@ func (l *tlog[K, V]) GetByTime(start time.Time) (TMessage[K, V], error) {
 		return TMessage[K, V]{Offset: OffsetInvalid}, err
 	}
 	return l.decode(msg)
+}
+
+func (l *tlog[K, V]) Raw() Log {
+	return l.Log
 }
 
 func (l *tlog[K, V]) encode(tmsg TMessage[K, V]) (msg Message, err error) {
