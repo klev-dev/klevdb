@@ -48,13 +48,11 @@ func benchmarkPublish(b *testing.B) {
 	}
 	for _, bn := range []int{1, 8} {
 		for _, c := range cases {
-			opts := c.opts
-			bn := bn
 			b.Run(fmt.Sprintf("%d/%s", bn, c.name), func(b *testing.B) {
 				dir := MkdirBench(b)
 				defer os.RemoveAll(dir)
 
-				s, err := Open(dir, opts)
+				s, err := Open(dir, c.opts)
 				require.NoError(b, err)
 				defer s.Close()
 
@@ -139,7 +137,6 @@ func benchmarkConsume(b *testing.B) {
 		{"All", Options{TimeIndex: true, KeyIndex: true}},
 	}
 	for _, bn := range []int{1, 8} {
-		bn := bn
 		for _, c := range cases {
 			b.Run(fmt.Sprintf("W/%s/%d", c.name, bn), func(b *testing.B) {
 				dir := MkdirBench(b)
