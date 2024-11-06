@@ -6,9 +6,9 @@ toolchain go1.23.1
 
 require (
 	github.com/gofrs/flock v0.12.1
-	github.com/klev-dev/kleverr v0.0.0-20230327002055-63b8717d8103
+	github.com/klev-dev/kleverr v0.0.0-20241020235355-094c0f6ca824
 	github.com/mr-tron/base58 v1.2.0
-	github.com/plar/go-adaptive-radix-tree v1.0.5
+	github.com/plar/go-adaptive-radix-tree v1.0.6
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
 	golang.org/x/sync v0.8.0
