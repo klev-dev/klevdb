@@ -157,12 +157,12 @@ func (l *tlog[K, V]) encode(tmsg TMessage[K, V]) (msg Message, err error) {
 
 	msg.Key, err = l.keyCodec.Encode(tmsg.Key, tmsg.KeyEmpty)
 	if err != nil {
-		return InvalidMessage, nil
+		return InvalidMessage, err
 	}
 
 	msg.Value, err = l.valueCodec.Encode(tmsg.Value, tmsg.ValueEmpty)
 	if err != nil {
-		return InvalidMessage, nil
+		return InvalidMessage, err
 	}
 
 	return msg, nil
