@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	art "github.com/plar/go-adaptive-radix-tree"
+	art "github.com/plar/go-adaptive-radix-tree/v2"
 
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"

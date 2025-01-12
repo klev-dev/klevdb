@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/klev-dev/klevdb/message"
-	art "github.com/plar/go-adaptive-radix-tree"
+	art "github.com/plar/go-adaptive-radix-tree/v2"
 	"github.com/stretchr/testify/require"
 )
 
