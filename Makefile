@@ -1,11 +1,14 @@
 default: test
 
-.PHONY: test test-verbose
+.PHONY: test test-verbose lint
 test:
 	go test -cover ./...
 
 test-verbose:
 	go test -cover -v ./...
+
+lint:
+	golangci-lint run
 
 .PHONY:
 build:

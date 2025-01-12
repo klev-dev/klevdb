@@ -20,6 +20,8 @@ jobs:
       run: nix develop --command make build
     - name: Test
       run: nix develop --command make test-verbose
+    - name: Lint
+      run: nix develop --command make lint
     - name: Tidy
       run: nix develop --command go mod tidy
     - name: Check if tidy changed anything

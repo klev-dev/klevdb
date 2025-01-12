@@ -963,7 +963,8 @@ func testBackupSegment(t *testing.T) {
 	require.Equal(t, 1, stat.Segments)
 
 	bdir := t.TempDir()
-	l.Backup(bdir)
+	err = l.Backup(bdir)
+	require.NoError(t, err)
 
 	bl, err := Open(bdir, Options{TimeIndex: true, KeyIndex: true})
 	require.NoError(t, err)
@@ -1005,7 +1006,8 @@ func testBackupSegments(t *testing.T) {
 	require.Equal(t, 2, stat.Segments)
 
 	bdir := t.TempDir()
-	l.Backup(bdir)
+	err = l.Backup(bdir)
+	require.NoError(t, err)
 
 	bl, err := Open(bdir, Options{TimeIndex: true, KeyIndex: true})
 	require.NoError(t, err)
@@ -1469,7 +1471,6 @@ func TestConcurrent(t *testing.T) {
 	t.Run("Consume", testConcurrentConsume)
 	t.Run("Delete", testConcurrentDelete)
 	t.Run("GC", testConcurrentGC)
-	// t.Run("Close", testConcurrentClose)
 }
 
 func testConcurrentPubsubRecent(t *testing.T) {
@@ -1690,44 +1691,6 @@ func testConcurrentGC(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 		return nil
-	})
-
-	err = g.Wait()
-	if serr := kleverr.Get(err); serr != nil {
-		fmt.Println(serr.Print())
-	}
-	require.NoError(t, err)
-}
-
-func testConcurrentClose(t *testing.T) {
-	dir := t.TempDir()
-
-	msgs := message.Gen(100)
-	msgSize := message.Size(msgs[0])
-
-	l, err := Open(dir, Options{
-		Rollover: msgSize * 10,
-	})
-	require.NoError(t, err)
-	defer l.Close()
-
-	publishBatched(t, l, msgs, 10)
-
-	g, ctx := errgroup.WithContext(context.TODO())
-	g.Go(func() error {
-		for ctx.Err() == nil {
-			next, consumed, err := l.Consume(OffsetOldest, 32)
-			if err != nil {
-				return err
-			}
-			require.Equal(t, int64(10), next)
-			require.Equal(t, msgs[0:10], consumed)
-		}
-		return nil
-	})
-
-	g.Go(func() error {
-		return l.Close()
 	})
 
 	err = g.Wait()

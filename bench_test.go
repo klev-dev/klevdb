@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/klev-dev/klevdb/message"
 )
@@ -91,23 +91,22 @@ func benchmarkPublishMulti(b *testing.B) {
 	b.SetBytes(s.Size(msgs[0]) * 4)
 	b.ResetTimer()
 
-	var wg sync.WaitGroup
+	g := new(errgroup.Group)
 	for k := 0; k < 10; k++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		g.Go(func() error {
 			for i := 0; i < b.N; i += 4 {
 				top := i + 4
 				if top > b.N {
 					top = b.N
 				}
 				if _, err := s.Publish(msgs[i:top]); err != nil {
-					b.Fatal(err)
+					return err
 				}
 			}
-		}()
+			return nil
+		})
 	}
-	wg.Wait()
+	require.NoError(b, g.Wait())
 
 	b.StopTimer()
 }
@@ -237,19 +236,18 @@ func benchmarkConsumeMulti(b *testing.B) {
 	b.SetBytes(s.Size(msgs[0]) * 4)
 	b.ResetTimer()
 
-	var wg sync.WaitGroup
+	g := new(errgroup.Group)
 	for k := 0; k < 10; k++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		g.Go(func() error {
 			for i := 0; i < b.N; i += 4 {
 				if _, _, err := s.Consume(int64(i), 4); err != nil {
-					b.Fatal(err)
+					return err
 				}
 			}
-		}()
+			return nil
+		})
 	}
-	wg.Wait()
+	require.NoError(b, g.Wait())
 
 	b.StopTimer()
 }
@@ -398,19 +396,18 @@ func benchmarkGetKeyMulti(b *testing.B) {
 	b.SetBytes(s.Size(msgs[0]))
 	b.ResetTimer()
 
-	var wg sync.WaitGroup
+	g := new(errgroup.Group)
 	for k := 0; k < 10; k++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		g.Go(func() error {
 			for i := 0; i < b.N; i++ {
 				if _, err := s.GetByKey(msgs[i].Key); err != nil {
-					b.Fatal(err)
+					return err
 				}
 			}
-		}()
+			return nil
+		})
 	}
-	wg.Wait()
+	require.NoError(b, g.Wait())
 
 	b.StopTimer()
 }
@@ -427,34 +424,33 @@ func benchmarkBaseMulti(b *testing.B) {
 
 	b.ResetTimer()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	g := new(errgroup.Group)
 
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		for i := 0; i < b.N; i += 10 {
 			top := i + 10
 			if top > b.N {
 				top = b.N
 			}
 			if _, err := s.Publish(msgs[i:top]); err != nil {
-				b.Fatal(err)
+				return err
 			}
 		}
-	}()
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
-
+	g.Go(func() error {
 		offset := OffsetOldest
 		for offset < int64(len(msgs)) {
 			next, _, err := s.Consume(offset, 10)
-			require.NoError(b, err)
+			if err != nil {
+				return err
+			}
 			offset = next
 		}
-	}()
-
-	wg.Wait()
+		return nil
+	})
+	require.NoError(b, g.Wait())
 
 	b.StopTimer()
 }
