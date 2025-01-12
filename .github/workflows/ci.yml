@@ -1,25 +1,26 @@
 name: CI
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
+  push:
     branches: [ "main" ]
 
 jobs:
-
   build:
+    name: Build and test
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v3
+    - uses: cachix/install-nix-action@v27
       with:
-        go-version: 1.22
-
+        nix_path: nixpkgs=channel:nixos-unstable
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: DeterminateSystems/magic-nix-cache-action@main
     - name: Build
-      run: go build -v ./...
-
+      run: nix develop --command make build
     - name: Test
-      run: go test -v ./...
+      run: nix develop --command make test-verbose
+    - name: Tidy
+      run: nix develop --command go mod tidy
+    - name: Check if tidy changed anything
+      run: git diff --exit-code
