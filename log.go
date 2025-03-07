@@ -18,7 +18,7 @@ import (
 )
 
 // Open create a log based on a dir and set of options
-func Open(dir string, opts Options) (Log, error) {
+func Open(dir string, opts Options) (result Log, err error) {
 	if opts.Rollover == 0 {
 		opts.Rollover = 1024 * 1024
 	}
@@ -45,6 +45,13 @@ func Open(dir string, opts Options) (Log, error) {
 			return nil, kleverr.Newf("log already locked")
 		}
 	}
+	defer func() {
+		if err != nil {
+			if lerr := lock.Unlock(); lerr != nil {
+				err = kleverr.Newf("%w: could not release lock: %w", err, lerr)
+			}
+		}
+	}()
 
 	params := index.Params{Times: opts.TimeIndex, Keys: opts.KeyIndex}
 
