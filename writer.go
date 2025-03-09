@@ -2,6 +2,7 @@ package klevdb
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
-	"github.com/klev-dev/kleverr"
 )
 
 type writer struct {
@@ -27,14 +27,14 @@ type writer struct {
 func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writer, error) {
 	messages, err := message.OpenWriter(seg.Log)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[klevdb.openWriter] %s messages open: %w", seg.Log, err)
 	}
 
 	var ix *writerIndex
 	if messages.Size() > 0 {
 		indexItems, err := seg.ReindexAndReadIndex(params)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[klevdb.openWriter] %s reindex: %w", seg.Index, err)
 		}
 		ix = newWriterIndex(indexItems, params.Keys, seg.Offset, nextTime)
 	} else {
@@ -43,12 +43,12 @@ func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writ
 
 	items, err := index.OpenWriter(seg.Index, params)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[klevdb.openWriter] %s index open: %w", seg.Index, err)
 	}
 
 	reader, err := openReaderAppend(seg, params, ix)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[klevdb.openWriter] %d reader open: %w", seg.Offset, err)
 	}
 
 	return &writer{
@@ -63,7 +63,11 @@ func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writ
 }
 
 func (w *writer) GetNextOffset() (int64, error) {
-	return w.index.GetNextOffset()
+	nextOffset, err := w.index.GetNextOffset()
+	if err != nil {
+		return OffsetInvalid, fmt.Errorf("[klevdb.writer.GetNextOffset] get: %w", err)
+	}
+	return nextOffset, nil
 }
 
 func (w *writer) NeedsRollover(rollover int64) bool {
@@ -82,12 +86,12 @@ func (w *writer) Publish(msgs []message.Message) (int64, error) {
 
 		position, err := w.messages.Write(msgs[i])
 		if err != nil {
-			return OffsetInvalid, err
+			return OffsetInvalid, fmt.Errorf("[klevdb.writer.Publish] messages write: %w", err)
 		}
 
 		items[i] = w.params.NewItem(msgs[i], position, indexTime)
 		if err := w.items.Write(items[i]); err != nil {
-			return OffsetInvalid, err
+			return OffsetInvalid, fmt.Errorf("[klevdb.writer.Publish] index write: %w", err)
 		}
 		indexTime = items[i].Timestamp
 	}
@@ -105,19 +109,19 @@ var errSegmentChanged = errors.New("writing segment changed")
 
 func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 	if err := w.Sync(); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("[klevdb.writer.Delete] sync: %w", err)
 	}
 
 	if len(rs.SurviveOffsets)+len(rs.DeletedOffsets) != w.index.Len() {
 		// the number of messages changed, nothing to drop
 		if err := rs.Segment.Remove(); err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("[klevdb.writer.Delete] rewrite remove: %w", err)
 		}
-		return nil, nil, kleverr.Newf("delete failed: %w", errSegmentChanged)
+		return nil, nil, fmt.Errorf("[klevdb.writer.Delete] rewrite check: %w", errSegmentChanged)
 	}
 
 	if err := w.Close(); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("[klevdb.writer.Delete] close: %w", err)
 	}
 
 	if len(rs.SurviveOffsets) == 0 {
@@ -179,20 +183,20 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 
 func (w *writer) Sync() error {
 	if err := w.messages.Sync(); err != nil {
-		return err
+		return fmt.Errorf("[klevdb.writer.Sync] messages: %w", err)
 	}
 	if err := w.items.Sync(); err != nil {
-		return err
+		return fmt.Errorf("[klevdb.writer.Sync] index: %w", err)
 	}
 	return nil
 }
 
 func (w *writer) Close() error {
 	if err := w.messages.Close(); err != nil {
-		return err
+		return fmt.Errorf("[klevdb.writer.Close] messages: %w", err)
 	}
 	if err := w.items.Close(); err != nil {
-		return err
+		return fmt.Errorf("[klevdb.writer.Close] index: %w", err)
 	}
 
 	return w.reader.Close()
@@ -273,16 +277,19 @@ func (ix *writerIndex) Consume(offset int64) (int64, int64, int64, error) {
 	defer ix.mu.RUnlock()
 
 	position, maxPosition, err := index.Consume(ix.items, offset)
-	if err == index.ErrIndexEmpty {
+	switch {
+	case err == nil:
+		return position, maxPosition, offset, nil
+	case errors.Is(err, index.ErrIndexEmpty):
 		if nextOffset := ix.nextOffset.Load(); offset <= nextOffset {
 			return -1, -1, nextOffset, nil
 		}
-	} else if err == message.ErrInvalidOffset {
+	case errors.Is(err, message.ErrInvalidOffset):
 		if nextOffset := ix.nextOffset.Load(); offset == nextOffset {
 			return -1, -1, nextOffset, nil
 		}
 	}
-	return position, maxPosition, offset, err
+	return -1, -1, OffsetInvalid, fmt.Errorf("[klevdb.writerIndex.Consume] consume: %w", err)
 }
 
 func (ix *writerIndex) Get(offset int64) (int64, error) {
@@ -290,26 +297,37 @@ func (ix *writerIndex) Get(offset int64) (int64, error) {
 	defer ix.mu.RUnlock()
 
 	position, err := index.Get(ix.items, offset)
-	if err == message.ErrNotFound {
+	switch {
+	case err == nil:
+		return position, nil
+	case errors.Is(err, message.ErrNotFound):
 		if nextOffset := ix.nextOffset.Load(); offset >= nextOffset {
-			return 0, message.ErrInvalidOffset
+			return -1, fmt.Errorf("[klevdb.writerIndex.Get] get offset too big: %w", message.ErrInvalidOffset)
 		}
 	}
-	return position, err
+	return -1, fmt.Errorf("[klevdb.writerIndex.Get] get: %w", err)
 }
 
 func (ix *writerIndex) Keys(keyHash []byte) ([]int64, error) {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 
-	return index.Keys(ix.keys, keyHash)
+	offsets, err := index.Keys(ix.keys, keyHash)
+	if err != nil {
+		return nil, fmt.Errorf("[klevdb.writerIndex.Keys] keys: %w", err)
+	}
+	return offsets, nil
 }
 
 func (ix *writerIndex) Time(ts int64) (int64, error) {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 
-	return index.Time(ix.items, ts)
+	offset, err := index.Time(ix.items, ts)
+	if err != nil {
+		return OffsetInvalid, fmt.Errorf("[klevdb.writerIndex.Time] time: %w", err)
+	}
+	return offset, nil
 }
 
 func (ix *writerIndex) Len() int {
