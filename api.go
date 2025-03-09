@@ -2,6 +2,7 @@ package klevdb
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/klev-dev/klevdb/index"
@@ -139,29 +140,45 @@ type Log interface {
 
 // Stat stats a store directory, without opening the store
 func Stat(dir string, opts Options) (Stats, error) {
-	return segment.StatDir(dir, index.Params{
+	stat, err := segment.StatDir(dir, index.Params{
 		Times: opts.TimeIndex,
 		Keys:  opts.KeyIndex,
 	})
+	if err != nil {
+		return Stats{}, fmt.Errorf("[klevdb.Stat] %s stat: %w", dir, err)
+	}
+	return stat, nil
 }
 
 // Backup backups a store directory to another location, without opening the store
 func Backup(src, dst string) error {
-	return segment.BackupDir(src, dst)
+	err := segment.BackupDir(src, dst)
+	if err != nil {
+		return fmt.Errorf("[klevdb.Backup] %s backup to %s: %w", src, dst, err)
+	}
+	return nil
 }
 
 // Check runs an integrity check, without opening the store
 func Check(dir string, opts Options) error {
-	return segment.CheckDir(dir, index.Params{
+	err := segment.CheckDir(dir, index.Params{
 		Times: opts.TimeIndex,
 		Keys:  opts.KeyIndex,
 	})
+	if err != nil {
+		return fmt.Errorf("[klevdb.Check] %s check: %w", dir, err)
+	}
+	return nil
 }
 
 // Recover rewrites the storage to include all messages prior the first that fails an integrity check
 func Recover(dir string, opts Options) error {
-	return segment.RecoverDir(dir, index.Params{
+	err := segment.RecoverDir(dir, index.Params{
 		Times: opts.TimeIndex,
 		Keys:  opts.KeyIndex,
 	})
+	if err != nil {
+		return fmt.Errorf("[klevdb.Record] %s recover: %w", dir, err)
+	}
+	return nil
 }

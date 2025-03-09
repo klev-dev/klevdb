@@ -3,9 +3,8 @@ package klevdb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
-
-	"github.com/klev-dev/kleverr"
 )
 
 var ErrOffsetNotifyClosed = errors.New("offset notify already closed")
@@ -36,7 +35,7 @@ func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
 	b, ok := <-w.barrier
 	if !ok {
 		// already closed, return error
-		return kleverr.Ret(ErrOffsetNotifyClosed)
+		return fmt.Errorf("[klevdb.OffsetNotify.Read] aquire barrier: %w", ErrOffsetNotifyClosed)
 	}
 
 	// probe the current offset
@@ -55,7 +54,7 @@ func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
 	case <-b:
 		return nil
 	case <-ctx.Done():
-		return kleverr.Ret(ctx.Err())
+		return fmt.Errorf("[klevdb.OffsetNotify.Read] wait canceled: %w", ctx.Err())
 	}
 }
 
@@ -84,7 +83,7 @@ func (w *OffsetNotify) Close() error {
 	b, ok := <-w.barrier
 	if !ok {
 		// already closed, return an error
-		return kleverr.Ret(ErrOffsetNotifyClosed)
+		return fmt.Errorf("[klevdb.OffsetNotify.Close] aquire barrier: %w", ErrOffsetNotifyClosed)
 	}
 
 	// close the current barrier, e.g. broadcasting update

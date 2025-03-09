@@ -1,6 +1,9 @@
 package klevdb
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type BlockingLog interface {
 	Log
@@ -12,18 +15,24 @@ type BlockingLog interface {
 	ConsumeByKeyBlocking(ctx context.Context, key []byte, offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
 }
 
+// TODO docs
 func OpenBlocking(dir string, opts Options) (BlockingLog, error) {
 	l, err := Open(dir, opts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[klevdb.OpenBlocking] %s open: %w", dir, err)
 	}
-	return WrapBlocking(l)
+	w, err := WrapBlocking(l)
+	if err != nil {
+		return nil, fmt.Errorf("[klevdb.OpenBlocking] %s wrap: %w", dir, err)
+	}
+	return w, nil
 }
 
+// TODO docs
 func WrapBlocking(l Log) (BlockingLog, error) {
 	next, err := l.NextOffset()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[klevdb.WrapBlocking] %s next offset: %w", l, err)
 	}
 	return &blockingLog{l, NewOffsetNotify(next)}, nil
 }
@@ -35,27 +44,42 @@ type blockingLog struct {
 
 func (l *blockingLog) Publish(messages []Message) (int64, error) {
 	nextOffset, err := l.Log.Publish(messages)
+	if err != nil {
+		return OffsetInvalid, fmt.Errorf("[klevdb.BlockingLog.Publish] %s publish: %w", l.Log, err)
+	}
+
 	l.notify.Set(nextOffset)
-	return nextOffset, err
+	return nextOffset, nil
 }
 
 func (l *blockingLog) ConsumeBlocking(ctx context.Context, offset int64, maxCount int64) (int64, []Message, error) {
 	if err := l.notify.Wait(ctx, offset); err != nil {
-		return 0, nil, err
+		return OffsetInvalid, nil, fmt.Errorf("[klevdb.BlockingLog.ConsumeBlocking] %s wait: %w", l.Log, err)
 	}
-	return l.Log.Consume(offset, maxCount)
+	next, msgs, err := l.Log.Consume(offset, maxCount)
+	if err != nil {
+		return OffsetInvalid, nil, fmt.Errorf("[klevdb.BlockingLog.ConsumeBlocking] %s consume: %w", l.Log, err)
+	}
+	return next, msgs, nil
 }
 
 func (l *blockingLog) ConsumeByKeyBlocking(ctx context.Context, key []byte, offset int64, maxCount int64) (int64, []Message, error) {
 	if err := l.notify.Wait(ctx, offset); err != nil {
-		return 0, nil, err
+		return OffsetInvalid, nil, fmt.Errorf("[klevdb.BlockingLog.ConsumeByKeyBlocking] %s wait: %w", l.Log, err)
 	}
-	return l.Log.ConsumeByKey(key, offset, maxCount)
+	next, msgs, err := l.Log.ConsumeByKey(key, offset, maxCount)
+	if err != nil {
+		return OffsetInvalid, nil, fmt.Errorf("[klevdb.BlockingLog.ConsumeByKeyBlocking] %s consume: %w", l.Log, err)
+	}
+	return next, msgs, nil
 }
 
 func (l *blockingLog) Close() error {
 	if err := l.notify.Close(); err != nil {
-		return err
+		return fmt.Errorf("[klevdb.BlockingLog.Close] %s notify close: %w", l.Log, err)
 	}
-	return l.Log.Close()
+	if err := l.Log.Close(); err != nil {
+		return fmt.Errorf("[klevdb.BlockingLog.Close] %s close: %w", l.Log, err)
+	}
+	return nil
 }

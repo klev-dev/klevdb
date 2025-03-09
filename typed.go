@@ -1,6 +1,9 @@
 package klevdb
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type TMessage[K any, V any] struct {
 	Offset     int64
@@ -47,7 +50,7 @@ type TLog[K any, V any] interface {
 func OpenT[K any, V any](dir string, opts Options, keyCodec Codec[K], valueCodec Codec[V]) (TLog[K, V], error) {
 	l, err := Open(dir, opts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[OpenT] %s open: %w", dir, err)
 	}
 	return &tlog[K, V]{l, keyCodec, valueCodec}, nil
 }
@@ -69,17 +72,21 @@ func (l *tlog[K, V]) Publish(tmessages []TMessage[K, V]) (int64, error) {
 	for i, tmsg := range tmessages {
 		messages[i], err = l.encode(tmsg)
 		if err != nil {
-			return OffsetInvalid, err
+			return OffsetInvalid, fmt.Errorf("[klevdb.TLog.Publish] encode: %w", err)
 		}
 	}
 
-	return l.Log.Publish(messages)
+	offset, err := l.Log.Publish(messages)
+	if err != nil {
+		return OffsetInvalid, fmt.Errorf("[klevdb.TLog.Publish] publish: %w", err)
+	}
+	return offset, nil
 }
 
 func (l *tlog[K, V]) Consume(offset int64, maxCount int64) (int64, []TMessage[K, V], error) {
 	nextOffset, messages, err := l.Log.Consume(offset, maxCount)
 	if err != nil {
-		return OffsetInvalid, nil, err
+		return OffsetInvalid, nil, fmt.Errorf("[klevdb.TLog.Consume] consume: %w", err)
 	}
 	if len(messages) == 0 {
 		return nextOffset, nil, nil
@@ -89,7 +96,7 @@ func (l *tlog[K, V]) Consume(offset int64, maxCount int64) (int64, []TMessage[K,
 	for i, msg := range messages {
 		tmessages[i], err = l.decode(msg)
 		if err != nil {
-			return OffsetInvalid, nil, err
+			return OffsetInvalid, nil, fmt.Errorf("[klevdb.TLog.Consume] decode: %w", err)
 		}
 	}
 	return nextOffset, tmessages, nil
@@ -98,12 +105,12 @@ func (l *tlog[K, V]) Consume(offset int64, maxCount int64) (int64, []TMessage[K,
 func (l *tlog[K, V]) ConsumeByKey(key K, empty bool, offset int64, maxCount int64) (int64, []TMessage[K, V], error) {
 	kbytes, err := l.keyCodec.Encode(key, empty)
 	if err != nil {
-		return OffsetInvalid, nil, err
+		return OffsetInvalid, nil, fmt.Errorf("[klevdb.TLog.ConsumeByKey] encode: %w", err)
 	}
 
 	nextOffset, messages, err := l.Log.ConsumeByKey(kbytes, offset, maxCount)
 	if err != nil {
-		return OffsetInvalid, nil, err
+		return OffsetInvalid, nil, fmt.Errorf("[klevdb.TLog.ConsumeByKey] consume: %w", err)
 	}
 	if len(messages) == 0 {
 		return nextOffset, nil, nil
@@ -113,7 +120,7 @@ func (l *tlog[K, V]) ConsumeByKey(key K, empty bool, offset int64, maxCount int6
 	for i, msg := range messages {
 		tmessages[i], err = l.decode(msg)
 		if err != nil {
-			return OffsetInvalid, nil, err
+			return OffsetInvalid, nil, fmt.Errorf("[klevdb.TLog.ConsumeByKey] decode: %w", err)
 		}
 	}
 	return nextOffset, tmessages, nil
@@ -122,29 +129,41 @@ func (l *tlog[K, V]) ConsumeByKey(key K, empty bool, offset int64, maxCount int6
 func (l *tlog[K, V]) Get(offset int64) (TMessage[K, V], error) {
 	msg, err := l.Log.Get(offset)
 	if err != nil {
-		return TMessage[K, V]{Offset: OffsetInvalid}, err
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.Get] get: %w", err)
 	}
-	return l.decode(msg)
+	tmsg, err := l.decode(msg)
+	if err != nil {
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.Get] decode: %w", err)
+	}
+	return tmsg, nil
 }
 
 func (l *tlog[K, V]) GetByKey(key K, empty bool) (TMessage[K, V], error) {
 	kbytes, err := l.keyCodec.Encode(key, empty)
 	if err != nil {
-		return TMessage[K, V]{Offset: OffsetInvalid}, err
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.GetByKey] encode: %w", err)
 	}
 	msg, err := l.Log.GetByKey(kbytes)
 	if err != nil {
-		return TMessage[K, V]{Offset: OffsetInvalid}, err
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.GetByKey] get: %w", err)
 	}
-	return l.decode(msg)
+	tmsg, err := l.decode(msg)
+	if err != nil {
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.GetByKey] decode: %w", err)
+	}
+	return tmsg, nil
 }
 
 func (l *tlog[K, V]) GetByTime(start time.Time) (TMessage[K, V], error) {
 	msg, err := l.Log.GetByTime(start)
 	if err != nil {
-		return TMessage[K, V]{Offset: OffsetInvalid}, err
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.GetByTime] get: %w", err)
 	}
-	return l.decode(msg)
+	tmsg, err := l.decode(msg)
+	if err != nil {
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.GetByTime] decode: %w", err)
+	}
+	return tmsg, nil
 }
 
 func (l *tlog[K, V]) Raw() Log {
@@ -157,12 +176,12 @@ func (l *tlog[K, V]) encode(tmsg TMessage[K, V]) (msg Message, err error) {
 
 	msg.Key, err = l.keyCodec.Encode(tmsg.Key, tmsg.KeyEmpty)
 	if err != nil {
-		return InvalidMessage, err
+		return InvalidMessage, fmt.Errorf("[klevdb.TLog.encode] key: %w", err)
 	}
 
 	msg.Value, err = l.valueCodec.Encode(tmsg.Value, tmsg.ValueEmpty)
 	if err != nil {
-		return InvalidMessage, err
+		return InvalidMessage, fmt.Errorf("[klevdb.TLog.encode] value: %w", err)
 	}
 
 	return msg, nil
@@ -174,12 +193,12 @@ func (l *tlog[K, V]) decode(msg Message) (tmsg TMessage[K, V], err error) {
 
 	tmsg.Key, tmsg.KeyEmpty, err = l.keyCodec.Decode(msg.Key)
 	if err != nil {
-		return TMessage[K, V]{Offset: OffsetInvalid}, err
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.decode] key: %w", err)
 	}
 
 	tmsg.Value, tmsg.ValueEmpty, err = l.valueCodec.Decode(msg.Value)
 	if err != nil {
-		return TMessage[K, V]{Offset: OffsetInvalid}, err
+		return TMessage[K, V]{Offset: OffsetInvalid}, fmt.Errorf("[klevdb.TLog.decode] value: %w", err)
 	}
 
 	return tmsg, nil

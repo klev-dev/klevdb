@@ -3,8 +3,7 @@ package klevdb
 import (
 	"encoding/binary"
 	"encoding/json"
-
-	"github.com/klev-dev/kleverr"
+	"fmt"
 )
 
 type Codec[T any] interface {
@@ -77,7 +76,7 @@ func (c varintCodec) Decode(b []byte) (int64, bool, error) {
 	}
 	t, n := binary.Varint(b)
 	if n <= 0 {
-		return 0, true, kleverr.Newf("invalid varint: %d", n)
+		return 0, true, fmt.Errorf("[klevdb.VarintCodec.Decode] invalid varint %d", n)
 	}
 	return t, false, nil
 }

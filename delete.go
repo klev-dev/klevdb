@@ -2,6 +2,7 @@ package klevdb
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -24,7 +25,7 @@ func DeleteMultiWithWait(d time.Duration) DeleteMultiBackoff {
 		case <-t.C:
 			return nil
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("[klevdb.DeleteMultiWithWait] canceled: %w", ctx.Err())
 		}
 	}
 }
@@ -48,7 +49,7 @@ func DeleteMulti(ctx context.Context, l Log, offsets map[int64]struct{}, backoff
 		deleted, size, err := l.Delete(offsets)
 		switch {
 		case err != nil:
-			return deletedOffsets, deletedSize, err
+			return deletedOffsets, deletedSize, fmt.Errorf("[klevdb.DeleteMulti] delete: %w", err)
 		case len(deleted) == 0:
 			return deletedOffsets, deletedSize, nil
 		}
@@ -61,7 +62,7 @@ func DeleteMulti(ctx context.Context, l Log, offsets map[int64]struct{}, backoff
 		})
 
 		if err := backoff(ctx); err != nil {
-			return deletedOffsets, deletedSize, err
+			return deletedOffsets, deletedSize, fmt.Errorf("[klevdb.DeleteMulti] backoff: %w", err)
 		}
 	}
 
