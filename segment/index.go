@@ -1,8 +1,9 @@
 package segment
 
 import (
+	"fmt"
+
 	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/kleverr"
 )
 
 type Offsetter interface {
@@ -61,11 +62,10 @@ func Get[S ~[]O, O Offsetter](segments S, offset int64) (O, int, error) {
 	switch {
 	case offset < beginSegment.GetOffset():
 		var v O
-		err := message.ErrNotFound
 		if beginSegment.GetOffset() == 0 {
-			err = message.ErrInvalidOffset
+			return v, -1, fmt.Errorf("[segment.Get] invalid offset %d: %w", offset, message.ErrInvalidOffset)
 		}
-		return v, -1, kleverr.Newf("%w: %d is before beginning", err, offset)
+		return v, -1, fmt.Errorf("[segment.Get] offset %d is before beginning: %w", offset, message.ErrNotFound)
 	case offset == beginSegment.GetOffset():
 		return beginSegment, 0, nil
 	}

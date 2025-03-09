@@ -12,7 +12,6 @@ import (
 
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/kleverr"
 )
 
 type Segment struct {
@@ -46,12 +45,12 @@ type Stats struct {
 func (s Segment) Stat(params index.Params) (Stats, error) {
 	logStat, err := os.Stat(s.Log)
 	if err != nil {
-		return Stats{}, kleverr.Newf("could not stat log: %w", err)
+		return Stats{}, fmt.Errorf("[segment.Segment.Stat] %s stat: %w", s.Log, err)
 	}
 
 	indexStat, err := os.Stat(s.Index)
 	if err != nil {
-		return Stats{}, kleverr.Newf("could not stat index: %w", err)
+		return Stats{}, fmt.Errorf("[segment.Segment.Stat] %s stat: %w", s.Index, err)
 	}
 
 	return Stats{
@@ -64,7 +63,7 @@ func (s Segment) Stat(params index.Params) (Stats, error) {
 func (s Segment) Check(params index.Params) error {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
-		return err
+		return fmt.Errorf("[segment.Segment.Check] %s open reader: %w", s.Log, err)
 	}
 	defer log.Close()
 
@@ -75,7 +74,7 @@ func (s Segment) Check(params index.Params) error {
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return kleverr.Newf("%s: %w", s.Log, err)
+			return fmt.Errorf("[segment.Segment.Check] %s read: %w", s.Log, err)
 		}
 
 		item := params.NewItem(msg, position, indexTime)
@@ -89,13 +88,13 @@ func (s Segment) Check(params index.Params) error {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
-		return err
+		return fmt.Errorf("[segment.Segment.Check] %s read: %w", s.Index, err)
 	case len(logIndex) != len(items):
-		return kleverr.Newf("%s: incorrect index size: %w", s.Index, index.ErrCorrupted)
+		return fmt.Errorf("[segment.Segment.Check] %s incorrect index size: %w", s.Index, index.ErrCorrupted)
 	default:
 		for i, item := range logIndex {
 			if item != items[i] {
-				return kleverr.Newf("%s: incorrect index item: %w", s.Index, index.ErrCorrupted)
+				return fmt.Errorf("[segment.Segment.Check] %s incorrect index item %d: %w", s.Index, i, index.ErrCorrupted)
 			}
 		}
 	}
@@ -106,13 +105,13 @@ func (s Segment) Check(params index.Params) error {
 func (s Segment) Recover(params index.Params) error {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
-		return err
+		return fmt.Errorf("[segment.Segment.Recover] %s open reader: %w", s.Log, err)
 	}
 	defer log.Close()
 
 	restore, err := message.OpenWriter(s.Log + ".recover")
 	if err != nil {
-		return err
+		return fmt.Errorf("[segment.Segment.Recover] %s.recover open writer: %w", s.Log, err)
 	}
 	defer restore.Close()
 
@@ -127,11 +126,11 @@ func (s Segment) Recover(params index.Params) error {
 			corrupted = true
 			break
 		} else if err != nil {
-			return err
+			return fmt.Errorf("[segment.Segment.Recover] %s read %d: %w", s.Log, position, err)
 		}
 
 		if _, err := restore.Write(msg); err != nil {
-			return err
+			return fmt.Errorf("[segment.Segment.Recover] %s.recover write %d: %w", s.Log, position, err)
 		}
 
 		item := params.NewItem(msg, position, indexTime)
@@ -142,22 +141,19 @@ func (s Segment) Recover(params index.Params) error {
 	}
 
 	if err := log.Close(); err != nil {
-		return err
+		return fmt.Errorf("[segment.Segment.Recover] %s close: %w", s.Log, err)
 	}
-	if err := restore.Sync(); err != nil {
-		return err
-	}
-	if err := restore.Close(); err != nil {
-		return err
+	if err := restore.SyncAndClose(); err != nil {
+		return fmt.Errorf("[segment.Segment.Recover] %s.recover sync close: %w", s.Log, err)
 	}
 
 	if corrupted {
 		if err := os.Rename(restore.Path, log.Path); err != nil {
-			return kleverr.Newf("could not rename restore: %w", err)
+			return fmt.Errorf("[segment.Segment.Recover] %s.recover rename to %s: %w", s.Log, s.Log, err)
 		}
 	} else {
 		if err := os.Remove(restore.Path); err != nil {
-			return kleverr.Newf("could not delete restore: %w", err)
+			return fmt.Errorf("[segment.Segment.Recover] %s.recover remove: %w", s.Log, err)
 		}
 	}
 
@@ -168,7 +164,7 @@ func (s Segment) Recover(params index.Params) error {
 	case errors.Is(err, index.ErrCorrupted):
 		corruptedIndex = true
 	case err != nil:
-		return err
+		return fmt.Errorf("[segment.Segment.Recover] %s read: %w", s.Index, err)
 	case len(logIndex) != len(items):
 		corruptedIndex = true
 	default:
@@ -182,7 +178,7 @@ func (s Segment) Recover(params index.Params) error {
 
 	if corruptedIndex {
 		if err := os.Remove(s.Index); err != nil {
-			return kleverr.Newf("could not remove corrupted index: %w", err)
+			return fmt.Errorf("[segment.Segment.Recover] %s remove: %w", s.Index, err)
 		}
 	}
 
@@ -194,7 +190,7 @@ func (s Segment) NeedsReindex() (bool, error) {
 	case os.IsNotExist(err):
 		return true, nil
 	case err != nil:
-		return false, kleverr.Newf("could not stat index: %w", err)
+		return false, fmt.Errorf("[segment.Segment.NeedsReindex] %s stat: %w", s.Index, err)
 	case info.Size() == 0:
 		return true, nil
 	default:
@@ -205,22 +201,34 @@ func (s Segment) NeedsReindex() (bool, error) {
 func (s Segment) ReindexAndReadIndex(params index.Params) ([]index.Item, error) {
 	switch reindex, err := s.NeedsReindex(); {
 	case err != nil:
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.ReindexAndReadIndex] %s needs reindex: %w", s.Index, err)
 	case reindex:
-		return s.Reindex(params)
+		items, err := s.Reindex(params)
+		if err != nil {
+			return nil, fmt.Errorf("[segment.Segment.ReindexAndReadIndex] %s reindex: %w", s.Index, err)
+		}
+		return items, nil
 	default:
-		return index.Read(s.Index, params)
+		items, err := index.Read(s.Index, params)
+		if err != nil {
+			return nil, fmt.Errorf("[segment.Segment.ReindexAndReadIndex] %s read: %w", s.Index, err)
+		}
+		return items, nil
 	}
 }
 
 func (s Segment) Reindex(params index.Params) ([]index.Item, error) {
 	log, err := message.OpenReader(s.Log)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Reindex] %s open reader: %w", s.Log, err)
 	}
 	defer log.Close()
 
-	return s.ReindexReader(params, log)
+	items, err := s.ReindexReader(params, log)
+	if err != nil {
+		return nil, fmt.Errorf("[segment.Segment.Reindex] %s reindex reader: %w", s.Index, err)
+	}
+	return items, nil
 }
 
 func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]index.Item, error) {
@@ -231,7 +239,7 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]inde
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[segment.Segment.ReindexReader] %s read: %w", s.Log, err)
 		}
 
 		item := params.NewItem(msg, position, indexTime)
@@ -242,7 +250,7 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]inde
 	}
 
 	if err := index.Write(s.Index, params, items); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.ReindexReader] %s write: %w", s.Index, err)
 	}
 	return items, nil
 }
@@ -250,20 +258,20 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]inde
 func (s Segment) Backup(targetDir string) error {
 	logName, err := filepath.Rel(s.Dir, s.Log)
 	if err != nil {
-		return kleverr.Newf("could not rel log: %w", err)
+		return fmt.Errorf("[segment.Segment.Backup] %s log rel: %w", s.Log, err)
 	}
 	targetLog := filepath.Join(targetDir, logName)
 	if err := copyFile(s.Log, targetLog); err != nil {
-		return kleverr.Newf("could not copy log: %w", err)
+		return fmt.Errorf("[segment.Segment.Backup] %s copy log to %s: %w", s.Log, targetLog, err)
 	}
 
 	indexName, err := filepath.Rel(s.Dir, s.Index)
 	if err != nil {
-		return kleverr.Newf("could not rel index: %w", err)
+		return fmt.Errorf("[segment.Segment.Backup] %s index rel: %w", s.Index, err)
 	}
 	targetIndex := filepath.Join(targetDir, indexName)
 	if err := copyFile(s.Index, targetIndex); err != nil {
-		return kleverr.Newf("could not copy index: %w", err)
+		return fmt.Errorf("[segment.Segment.Backup] %s copy index to %s: %w", s.Index, targetIndex, err)
 	}
 
 	return nil
@@ -272,7 +280,7 @@ func (s Segment) Backup(targetDir string) error {
 func (s Segment) ForRewrite() (Segment, error) {
 	randStr, err := randStr(8)
 	if err != nil {
-		return Segment{}, nil
+		return Segment{}, fmt.Errorf("[segment.Segment.ForRewrite] %d rand: %w", s.Offset, err)
 	}
 
 	s.Log = fmt.Sprintf("%s.rewrite.%s", s.Log, randStr)
@@ -282,11 +290,11 @@ func (s Segment) ForRewrite() (Segment, error) {
 
 func (olds Segment) Rename(news Segment) error {
 	if err := os.Rename(olds.Log, news.Log); err != nil {
-		return kleverr.Newf("could not rename log: %w", err)
+		return fmt.Errorf("[segment.Segment.Rename] %s log rename to %s: %w", olds.Log, news.Log, err)
 	}
 
 	if err := os.Rename(olds.Index, news.Index); err != nil {
-		return kleverr.Newf("could not rename index: %w", err)
+		return fmt.Errorf("[segment.Segment.Rename] %s index rename to %s: %w", olds.Index, news.Index, err)
 	}
 
 	return nil
@@ -295,15 +303,15 @@ func (olds Segment) Rename(news Segment) error {
 func (olds Segment) Override(news Segment) error {
 	// remove index segment so we don't have invalid index
 	if err := os.Remove(news.Index); err != nil {
-		return kleverr.Newf("could not delete index: %w", err)
+		return fmt.Errorf("[segment.Segment.Override] %s index remove: %w", news.Index, err)
 	}
 
 	if err := os.Rename(olds.Log, news.Log); err != nil {
-		return kleverr.Newf("could not rename log: %w", err)
+		return fmt.Errorf("[segment.Segment.Override] %s log rename to %s: %w", olds.Log, news.Log, err)
 	}
 
 	if err := os.Rename(olds.Index, news.Index); err != nil {
-		return kleverr.Newf("could not rename index: %w", err)
+		return fmt.Errorf("[segment.Segment.Override] %s index rename to %s: %w", olds.Index, news.Index, err)
 	}
 
 	return nil
@@ -311,10 +319,10 @@ func (olds Segment) Override(news Segment) error {
 
 func (s Segment) Remove() error {
 	if err := os.Remove(s.Index); err != nil {
-		return kleverr.Newf("could not delete index: %w", err)
+		return fmt.Errorf("[segment.Segment.Remove] %s index remove: %w", s.Index, err)
 	}
 	if err := os.Remove(s.Log); err != nil {
-		return kleverr.Newf("could not delete log: %w", err)
+		return fmt.Errorf("[segment.Segment.Remove] %s log remove: %w", s.Log, err)
 	}
 	return nil
 }
@@ -338,20 +346,20 @@ func (r *RewriteSegment) GetNewSegment() Segment {
 func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) (*RewriteSegment, error) {
 	dst, err := src.ForRewrite()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Rewrite] %d for rewrite: %w", src.Offset, err)
 	}
 
 	result := &RewriteSegment{Segment: dst}
 
 	srcLog, err := message.OpenReader(src.Log)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Rewrite] %s open reader: %w", src.Log, err)
 	}
 	defer srcLog.Close()
 
 	dstLog, err := message.OpenWriter(dst.Log)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Rewrite] %s open writer: %w", dst.Log, err)
 	}
 	defer dstLog.Close()
 
@@ -360,13 +368,15 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 
 	var srcPosition, indexTime int64
 	var dstItems []index.Item
+LOOP:
 	for {
 		msg, nextSrcPosition, err := srcLog.Read(srcPosition)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, err
+		switch {
+		case err == nil:
+		case errors.Is(err, io.EOF):
+			break LOOP
+		default:
+			return nil, fmt.Errorf("[segment.Segment.Rewrite] %s read %d: %w", src.Log, srcPosition, err)
 		}
 
 		if _, ok := dropOffsets[msg.Offset]; ok {
@@ -375,7 +385,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 		} else {
 			dstPosition, err := dstLog.Write(msg)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("[segment.Segment.Rewrite] %s write: %w", dst.Log, err)
 			}
 			result.SurviveOffsets[msg.Offset] = struct{}{}
 
@@ -388,18 +398,18 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 	}
 
 	if err := srcLog.Close(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Rewrite] %s close: %w", src.Log, err)
 	}
 	if err := dstLog.SyncAndClose(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Rewrite] %s sync close: %w", dst.Log, err)
 	}
 	if err := index.Write(dst.Index, params, dstItems); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Rewrite] %s write: %w", dst.Index, err)
 	}
 
 	result.Stats, err = dst.Stat(params)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[segment.Segment.Rewrite] %s stat: %w", dst.Log, err)
 	}
 	return result, nil
 }
