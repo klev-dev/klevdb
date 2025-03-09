@@ -2,6 +2,7 @@ package trim
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/klevdb/message"
@@ -16,7 +17,7 @@ func FindByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]st
 
 	maxOffset, err := l.NextOffset()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[trim.FindByOffset] %s next offset: %w", l, err)
 	}
 	if before == message.OffsetNewest {
 		before = maxOffset
@@ -28,7 +29,7 @@ func FindByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]st
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[trim.FindByOffset] %s consume %d: %w", l, offset, err)
 		}
 		offset = nextOffset
 
@@ -40,12 +41,12 @@ func FindByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]st
 		}
 
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[trim.FindByOffset] %s canceled %d: %w", l, offset, err)
 		}
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[trim.FindByOffset] %s canceled: %w", l, err)
 	}
 
 	return offsets, nil
@@ -57,7 +58,11 @@ func FindByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]st
 func ByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct{}, int64, error) {
 	offsets, err := FindByOffset(ctx, l, before)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("[trim.ByOffset] %s find: %w", l, err)
 	}
-	return l.Delete(offsets)
+	m, sz, err := l.Delete(offsets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("[trim.ByOffset] %s delete: %w", l, err)
+	}
+	return m, sz, nil
 }

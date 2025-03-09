@@ -3,6 +3,7 @@ package trim
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/klev-dev/klevdb"
@@ -20,19 +21,17 @@ func FindByAge(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]s
 		// this log is not indexed by time, use the max as a bound
 		maxOffset, err = l.NextOffset()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[trim.FindByAge] %s next offset, no index: %w", l, err)
 		}
 	case errors.Is(err, klevdb.ErrNotFound):
 		// all messages are before, again use the max as a bound
 		maxOffset, err = l.NextOffset()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[trim.FindByAge] %s next offset, not found: %w", l, err)
 		}
 	default:
 		// something else went wrong
-		if err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("[trim.FindByAge] %s offset by time: %w", l, err)
 	}
 
 	var offsets = map[int64]struct{}{}
@@ -41,7 +40,7 @@ SEARCH:
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[trim.FindByAge] %s consume %d: %w", l, offset, err)
 		}
 		offset = nextOffset
 
@@ -54,12 +53,12 @@ SEARCH:
 		}
 
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[trim.FindByAge] %s canceled %d: %w", l, offset, err)
 		}
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[trim.FindByAge] %s canceled: %w", l, err)
 	}
 
 	return offsets, nil
@@ -71,7 +70,11 @@ SEARCH:
 func ByAge(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, int64, error) {
 	offsets, err := FindByAge(ctx, l, before)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("[trim.ByAge] %s find: %w", l, err)
 	}
-	return l.Delete(offsets)
+	m, sz, err := l.Delete(offsets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("[trim.ByAge] %s delete: %w", l, err)
+	}
+	return m, sz, nil
 }

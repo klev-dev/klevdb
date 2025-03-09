@@ -2,6 +2,7 @@ package compact
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	art "github.com/plar/go-adaptive-radix-tree/v2"
@@ -17,7 +18,7 @@ import (
 func FindUpdates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, error) {
 	maxOffset, err := l.NextOffset()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[compact.FindUpdates] %s next offset: %w", l, err)
 	}
 
 	var keyOffset = art.New()
@@ -27,7 +28,7 @@ SEARCH:
 	for offset := klevdb.OffsetOldest; offset < maxOffset; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[compact.FindUpdates] %s consume %d: %w", l, offset, err)
 		}
 		offset = nextOffset
 
@@ -42,12 +43,12 @@ SEARCH:
 		}
 
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("[compact.FindUpdates] %s canceled %d: %w", l, offset, err)
 		}
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[compact.FindUpdates] %s canceled: %w", l, err)
 	}
 
 	return offsets, nil
@@ -63,7 +64,11 @@ SEARCH:
 func Updates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, int64, error) {
 	offsets, err := FindUpdates(ctx, l, before)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("[compact.Updates] %s find: %w", l, err)
 	}
-	return l.Delete(offsets)
+	m, sz, err := l.Delete(offsets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("[compact.Updates] %s delete: %w", l, err)
+	}
+	return m, sz, nil
 }

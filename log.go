@@ -549,3 +549,7 @@ func (l *log) Close() error {
 
 	return nil
 }
+
+func (l *log) String() string {
+	return l.dir
+}

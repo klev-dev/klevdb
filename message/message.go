@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/klev-dev/kleverr"
 )
 
 const (
@@ -22,13 +20,6 @@ const (
 
 var ErrInvalidOffset = errors.New("invalid offset")
 var ErrNotFound = errors.New("not found")
-
-func ValidateOffset(offset int64) error {
-	if offset < OffsetOldest {
-		return kleverr.Newf("%w: %d is not a valid offset", ErrInvalidOffset, offset)
-	}
-	return nil
-}
 
 type Message struct {
 	Offset int64
