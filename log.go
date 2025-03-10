@@ -371,7 +371,7 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 
 		newWriter, newReader, err := l.writer.Delete(rs)
 		switch {
-		case errors.Is(err, errSegmentChanged):
+		case err == errSegmentChanged:
 			return nil, 0, nil
 		case err != nil:
 			return nil, 0, err

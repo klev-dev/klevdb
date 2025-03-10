@@ -13,7 +13,7 @@ import (
 func Find(dir string) ([]Segment, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, kleverr.Newf("could not list dir: %w", err)
+		return nil, kleverr.Newf("read dir: %w", err)
 	}
 
 	var segments []Segment
@@ -23,7 +23,7 @@ func Find(dir string) ([]Segment, error) {
 
 			offset, err := strconv.ParseInt(offsetStr, 10, 64)
 			if err != nil {
-				return nil, kleverr.Newf("parse offset failed: %w", err)
+				return nil, kleverr.Newf("parse offset: %w", err)
 			}
 
 			segments = append(segments, New(dir, offset))
@@ -97,7 +97,7 @@ func BackupDir(dir, target string) error {
 	}
 
 	if err := os.MkdirAll(target, 0700); err != nil {
-		return kleverr.Newf("could not create backup dir: %w", err)
+		return kleverr.Newf("backup create dir: %w", err)
 	}
 
 	return Backup(segments, target)
@@ -106,7 +106,7 @@ func BackupDir(dir, target string) error {
 func Backup(segments []Segment, dir string) error {
 	for _, seg := range segments {
 		if err := seg.Backup(dir); err != nil {
-			return kleverr.Newf("could not backup segment %d: %w", seg.Offset, err)
+			return err
 		}
 	}
 

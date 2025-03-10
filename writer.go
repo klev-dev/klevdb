@@ -11,7 +11,6 @@ import (
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
-	"github.com/klev-dev/kleverr"
 )
 
 type writer struct {
@@ -113,7 +112,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		if err := rs.Segment.Remove(); err != nil {
 			return nil, nil, err
 		}
-		return nil, nil, kleverr.Newf("delete failed: %w", errSegmentChanged)
+		return nil, nil, errSegmentChanged
 	}
 
 	if err := w.Close(); err != nil {

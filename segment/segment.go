@@ -46,12 +46,12 @@ type Stats struct {
 func (s Segment) Stat(params index.Params) (Stats, error) {
 	logStat, err := os.Stat(s.Log)
 	if err != nil {
-		return Stats{}, kleverr.Newf("could not stat log: %w", err)
+		return Stats{}, kleverr.Newf("log stat: %w", err)
 	}
 
 	indexStat, err := os.Stat(s.Index)
 	if err != nil {
-		return Stats{}, kleverr.Newf("could not stat index: %w", err)
+		return Stats{}, kleverr.Newf("index stat: %w", err)
 	}
 
 	return Stats{
@@ -75,7 +75,7 @@ func (s Segment) Check(params index.Params) error {
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return kleverr.Newf("%s: %w", s.Log, err)
+			return err
 		}
 
 		item := params.NewItem(msg, position, indexTime)
@@ -91,11 +91,11 @@ func (s Segment) Check(params index.Params) error {
 	case err != nil:
 		return err
 	case len(logIndex) != len(items):
-		return kleverr.Newf("%s: incorrect index size: %w", s.Index, index.ErrCorrupted)
+		return kleverr.Newf("segment %d incorrect index size: %w", s.Offset, index.ErrCorrupted)
 	default:
 		for i, item := range logIndex {
 			if item != items[i] {
-				return kleverr.Newf("%s: incorrect index item: %w", s.Index, index.ErrCorrupted)
+				return kleverr.Newf("segment %d mismatch index item: %w", s.Offset, index.ErrCorrupted)
 			}
 		}
 	}
@@ -144,20 +144,17 @@ func (s Segment) Recover(params index.Params) error {
 	if err := log.Close(); err != nil {
 		return err
 	}
-	if err := restore.Sync(); err != nil {
-		return err
-	}
-	if err := restore.Close(); err != nil {
+	if err := restore.SyncAndClose(); err != nil {
 		return err
 	}
 
 	if corrupted {
 		if err := os.Rename(restore.Path, log.Path); err != nil {
-			return kleverr.Newf("could not rename restore: %w", err)
+			return kleverr.Newf("restore rename: %w", err)
 		}
 	} else {
 		if err := os.Remove(restore.Path); err != nil {
-			return kleverr.Newf("could not delete restore: %w", err)
+			return kleverr.Newf("restore delete: %w", err)
 		}
 	}
 
@@ -182,7 +179,7 @@ func (s Segment) Recover(params index.Params) error {
 
 	if corruptedIndex {
 		if err := os.Remove(s.Index); err != nil {
-			return kleverr.Newf("could not remove corrupted index: %w", err)
+			return kleverr.Newf("restore remove corrupted index: %w", err)
 		}
 	}
 
@@ -194,7 +191,7 @@ func (s Segment) NeedsReindex() (bool, error) {
 	case os.IsNotExist(err):
 		return true, nil
 	case err != nil:
-		return false, kleverr.Newf("could not stat index: %w", err)
+		return false, kleverr.Newf("index stat: %w", err)
 	case info.Size() == 0:
 		return true, nil
 	default:
@@ -250,20 +247,20 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]inde
 func (s Segment) Backup(targetDir string) error {
 	logName, err := filepath.Rel(s.Dir, s.Log)
 	if err != nil {
-		return kleverr.Newf("could not rel log: %w", err)
+		return kleverr.Newf("backup log rel: %w", err)
 	}
 	targetLog := filepath.Join(targetDir, logName)
 	if err := copyFile(s.Log, targetLog); err != nil {
-		return kleverr.Newf("could not copy log: %w", err)
+		return kleverr.Newf("backup log copy: %w", err)
 	}
 
 	indexName, err := filepath.Rel(s.Dir, s.Index)
 	if err != nil {
-		return kleverr.Newf("could not rel index: %w", err)
+		return kleverr.Newf("backup index rel: %w", err)
 	}
 	targetIndex := filepath.Join(targetDir, indexName)
 	if err := copyFile(s.Index, targetIndex); err != nil {
-		return kleverr.Newf("could not copy index: %w", err)
+		return kleverr.Newf("backup index copy: %w", err)
 	}
 
 	return nil
@@ -282,11 +279,11 @@ func (s Segment) ForRewrite() (Segment, error) {
 
 func (olds Segment) Rename(news Segment) error {
 	if err := os.Rename(olds.Log, news.Log); err != nil {
-		return kleverr.Newf("could not rename log: %w", err)
+		return kleverr.Newf("log rename: %w", err)
 	}
 
 	if err := os.Rename(olds.Index, news.Index); err != nil {
-		return kleverr.Newf("could not rename index: %w", err)
+		return kleverr.Newf("index rename: %w", err)
 	}
 
 	return nil
@@ -295,15 +292,15 @@ func (olds Segment) Rename(news Segment) error {
 func (olds Segment) Override(news Segment) error {
 	// remove index segment so we don't have invalid index
 	if err := os.Remove(news.Index); err != nil {
-		return kleverr.Newf("could not delete index: %w", err)
+		return kleverr.Newf("index remove: %w", err)
 	}
 
 	if err := os.Rename(olds.Log, news.Log); err != nil {
-		return kleverr.Newf("could not rename log: %w", err)
+		return kleverr.Newf("log rename: %w", err)
 	}
 
 	if err := os.Rename(olds.Index, news.Index); err != nil {
-		return kleverr.Newf("could not rename index: %w", err)
+		return kleverr.Newf("index rename: %w", err)
 	}
 
 	return nil
@@ -311,10 +308,10 @@ func (olds Segment) Override(news Segment) error {
 
 func (s Segment) Remove() error {
 	if err := os.Remove(s.Index); err != nil {
-		return kleverr.Newf("could not delete index: %w", err)
+		return kleverr.Newf("index remove: %w", err)
 	}
 	if err := os.Remove(s.Log); err != nil {
-		return kleverr.Newf("could not delete log: %w", err)
+		return kleverr.Newf("log remove: %w", err)
 	}
 	return nil
 }

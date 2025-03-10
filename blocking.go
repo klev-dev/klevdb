@@ -2,16 +2,18 @@ package klevdb
 
 import "context"
 
+// BlockingLog enhances log adding blocking consume
 type BlockingLog interface {
 	Log
 
-	// ConsumeBlocking is similar to Consume, but if offset is equal to the next offsetit will block until next event is produced
+	// ConsumeBlocking is similar to Consume, but if offset is equal to the next offset it will block until next message is produced
 	ConsumeBlocking(ctx context.Context, offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
 
 	// ConsumeByKeyBlocking is similar to ConsumeBlocking, but only returns messages matching the key
 	ConsumeByKeyBlocking(ctx context.Context, key []byte, offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
 }
 
+// OpenBlocking opens log and wraps it with support for blocking consume
 func OpenBlocking(dir string, opts Options) (BlockingLog, error) {
 	l, err := Open(dir, opts)
 	if err != nil {
@@ -20,6 +22,7 @@ func OpenBlocking(dir string, opts Options) (BlockingLog, error) {
 	return WrapBlocking(l)
 }
 
+// WrapBlocking wraps log with support for blocking consume
 func WrapBlocking(l Log) (BlockingLog, error) {
 	next, err := l.NextOffset()
 	if err != nil {
@@ -35,8 +38,12 @@ type blockingLog struct {
 
 func (l *blockingLog) Publish(messages []Message) (int64, error) {
 	nextOffset, err := l.Log.Publish(messages)
+	if err != nil {
+		return OffsetInvalid, err
+	}
+
 	l.notify.Set(nextOffset)
-	return nextOffset, err
+	return nextOffset, nil
 }
 
 func (l *blockingLog) ConsumeBlocking(ctx context.Context, offset int64, maxCount int64) (int64, []Message, error) {

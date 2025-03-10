@@ -2,7 +2,6 @@ package klevdb
 
 import (
 	"bytes"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -133,14 +132,15 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	}
 
 	positions, err := index.Keys(keyHash)
-	if err != nil {
-		if errors.Is(err, message.ErrNotFound) {
-			nextOffset, err := index.GetNextOffset()
-			if err != nil {
-				return OffsetInvalid, nil, err
-			}
-			return nextOffset, nil, nil
+	switch {
+	case err == nil:
+	case err == message.ErrNotFound:
+		nextOffset, err := index.GetNextOffset()
+		if err != nil {
+			return OffsetInvalid, nil, err
 		}
+		return nextOffset, nil, nil
+	default:
 		return OffsetInvalid, nil, err
 	}
 

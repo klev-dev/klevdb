@@ -13,7 +13,7 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-var ErrCorrupted = errors.New("message corrupted")
+var ErrCorrupted = errors.New("log corrupted")
 
 var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
@@ -31,17 +31,15 @@ type Writer struct {
 func OpenWriter(path string) (*Writer, error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
-		return nil, kleverr.Newf("could not open log: %w", err)
+		return nil, kleverr.Newf("log open: %w", err)
 	}
 
-	pos := int64(0)
-	if stat, err := f.Stat(); err != nil {
-		return nil, kleverr.Newf("could not stat log: %w", err)
-	} else {
-		pos = stat.Size()
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, kleverr.Newf("log stat: %w", err)
 	}
 
-	return &Writer{Path: path, f: f, pos: pos}, nil
+	return &Writer{Path: path, f: f, pos: stat.Size()}, nil
 }
 
 func (w *Writer) Write(m Message) (int64, error) {
@@ -71,7 +69,7 @@ func (w *Writer) Write(m Message) (int64, error) {
 
 	pos := w.pos
 	if n, err := w.f.Write(w.buff); err != nil {
-		return 0, kleverr.Newf("log failed write: %w", err)
+		return 0, kleverr.Newf("log write: %w", err)
 	} else {
 		w.pos += int64(n)
 	}
@@ -84,26 +82,23 @@ func (w *Writer) Size() int64 {
 
 func (w *Writer) Sync() error {
 	if err := w.f.Sync(); err != nil {
-		return kleverr.Newf("could not sync log: %w", err)
+		return kleverr.Newf("log sync: %w", err)
 	}
 	return nil
 }
 
 func (w *Writer) Close() error {
 	if err := w.f.Close(); err != nil {
-		return kleverr.Newf("could not close log: %w", err)
+		return kleverr.Newf("log close: %w", err)
 	}
 	return nil
 }
 
 func (w *Writer) SyncAndClose() error {
-	if err := w.f.Sync(); err != nil {
-		return kleverr.Newf("could not sync log: %w", err)
+	if err := w.Sync(); err != nil {
+		return err
 	}
-	if err := w.f.Close(); err != nil {
-		return kleverr.Newf("could not close log: %w", err)
-	}
-	return nil
+	return w.Close()
 }
 
 type Reader struct {
@@ -115,7 +110,7 @@ type Reader struct {
 func OpenReader(path string) (*Reader, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, kleverr.Newf("could not open log: %w", err)
+		return nil, kleverr.Newf("log open: %w", err)
 	}
 
 	return &Reader{
@@ -127,7 +122,7 @@ func OpenReader(path string) (*Reader, error) {
 func OpenReaderMem(path string) (*Reader, error) {
 	f, err := mmap.Open(path)
 	if err != nil {
-		return nil, kleverr.Newf("could not open log: %w", err)
+		return nil, kleverr.Newf("log open: %w", err)
 	}
 
 	return &Reader{
@@ -176,7 +171,7 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return -1, kleverr.Newf("%w: short header", ErrCorrupted)
 	default:
-		return -1, kleverr.Newf("could not read header: %w", err)
+		return -1, kleverr.Newf("header read: %w", err)
 	}
 
 	msg.Offset = int64(binary.BigEndian.Uint64(headerBytes[0:]))
@@ -200,12 +195,12 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 	case errors.Is(err, io.EOF):
 		return -1, kleverr.Newf("%w: no message", ErrCorrupted)
 	default:
-		return -1, kleverr.Newf("could not read message: %w", err)
+		return -1, kleverr.Newf("message read: %w", err)
 	}
 
 	actualCRC := crc32.Checksum(messageBytes, crc32cTable)
 	if expectedCRC != actualCRC {
-		return -1, kleverr.Newf("%w: invalid crc: expected=%d; actual=%d", ErrCorrupted, expectedCRC, actualCRC)
+		return -1, kleverr.Newf("%w: checksum mismatch", ErrCorrupted)
 	}
 
 	if keySize > 0 {
@@ -222,11 +217,11 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 func (r *Reader) Close() error {
 	if r.ra != nil {
 		if err := r.ra.Close(); err != nil {
-			return kleverr.Newf("could not close log: %w", err)
+			return kleverr.Newf("log close: %w", err)
 		}
 	} else {
 		if err := r.r.Close(); err != nil {
-			return kleverr.Newf("could not close log: %w", err)
+			return kleverr.Newf("log close: %w", err)
 		}
 	}
 	return nil

@@ -13,37 +13,53 @@ type TMessage[K any, V any] struct {
 
 // TLog is a typed log
 type TLog[K any, V any] interface {
+	// Publish see Log.Publish
 	Publish(messages []TMessage[K, V]) (nextOffset int64, err error)
 
+	// NextOffset see Log.NextOffset
 	NextOffset() (nextOffset int64, err error)
 
+	// Consume see Log.Consume
 	Consume(offset int64, maxCount int64) (nextOffset int64, messages []TMessage[K, V], err error)
 
+	// ConsumeByKey see Log.ConsumeByKey
 	ConsumeByKey(key K, empty bool, offset int64, maxCount int64) (nextOffset int64, messages []TMessage[K, V], err error)
 
+	// Get see Log.Get
 	Get(offset int64) (message TMessage[K, V], err error)
 
+	// GetByKey see Log.GetByKey
 	GetByKey(key K, empty bool) (message TMessage[K, V], err error)
 
+	// GetByTime see Log.GetByTime
 	GetByTime(start time.Time) (message TMessage[K, V], err error)
 
+	// Delete see Log.Delete
 	Delete(offsets map[int64]struct{}) (deletedOffsets map[int64]struct{}, deletedSize int64, err error)
 
+	// Size see Log.Size
 	Size(m Message) int64
 
+	// Stat see Log.Stat
 	Stat() (Stats, error)
 
+	// Backup see Log.Backup
 	Backup(dir string) error
 
+	// Sync see Log.Sync
 	Sync() (nextOffset int64, err error)
 
+	// GC see Log.GC
 	GC(unusedFor time.Duration) error
 
+	// Close see Log.Close
 	Close() error
 
+	// Raw returns the wrapped in log
 	Raw() Log
 }
 
+// OpenT opens a typed log with specified key/value codecs
 func OpenT[K any, V any](dir string, opts Options, keyCodec Codec[K], valueCodec Codec[V]) (TLog[K, V], error) {
 	l, err := Open(dir, opts)
 	if err != nil {
@@ -52,6 +68,7 @@ func OpenT[K any, V any](dir string, opts Options, keyCodec Codec[K], valueCodec
 	return &tlog[K, V]{l, keyCodec, valueCodec}, nil
 }
 
+// WrapT wraps a log with specified key/value codecs
 func WrapT[K any, V any](l Log, keyCodec Codec[K], valueCodec Codec[V]) (TLog[K, V], error) {
 	return &tlog[K, V]{l, keyCodec, valueCodec}, nil
 }

@@ -7,11 +7,13 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
+// Codec is interface satisfied by all codecs
 type Codec[T any] interface {
 	Encode(t T, empty bool) (b []byte, err error)
 	Decode(b []byte) (t T, empty bool, err error)
 }
 
+// JsonCodec supports coding values as a JSON
 type JsonCodec[T any] struct{}
 
 func (c JsonCodec[T]) Encode(t T, empty bool) ([]byte, error) {
@@ -48,6 +50,7 @@ func (c stringOptCodec) Decode(b []byte) (string, bool, error) {
 	return s, false, err
 }
 
+// StringOptCodec supports coding an optional string, e.g. differantiates between "" and nil strings
 var StringOptCodec = stringOptCodec{}
 
 type stringCodec struct{}
@@ -60,6 +63,7 @@ func (c stringCodec) Decode(b []byte) (string, bool, error) {
 	return string(b), false, nil
 }
 
+// StringCodec supports coding a string
 var StringCodec = stringCodec{}
 
 type varintCodec struct{}
@@ -82,4 +86,5 @@ func (c varintCodec) Decode(b []byte) (int64, bool, error) {
 	return t, false, nil
 }
 
+// VarintCodec supports coding integers as varint
 var VarintCodec = varintCodec{}
