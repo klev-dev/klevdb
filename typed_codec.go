@@ -3,8 +3,7 @@ package klevdb
 import (
 	"encoding/binary"
 	"encoding/json"
-
-	"github.com/klev-dev/kleverr"
+	"errors"
 )
 
 // Codec is interface satisfied by all codecs
@@ -75,15 +74,22 @@ func (c varintCodec) Encode(t int64, empty bool) ([]byte, error) {
 	return binary.AppendVarint(nil, t), nil
 }
 
+var errShortBuffer = errors.New("varint: short buffer")
+var errOverflow = errors.New("varint: overflow")
+
 func (c varintCodec) Decode(b []byte) (int64, bool, error) {
 	if b == nil {
 		return 0, true, nil
 	}
 	t, n := binary.Varint(b)
-	if n <= 0 {
-		return 0, true, kleverr.Newf("invalid varint: %d", n)
+	switch {
+	case n == 0:
+		return 0, true, errShortBuffer
+	case n < 0:
+		return 0, true, errOverflow
+	default:
+		return t, false, nil
 	}
-	return t, false, nil
 }
 
 // VarintCodec supports coding integers as varint

@@ -2,18 +2,18 @@ package segment
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/kleverr"
 )
 
 func Find(dir string) ([]Segment, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, kleverr.Newf("read dir: %w", err)
+		return nil, fmt.Errorf("find read dir: %w", err)
 	}
 
 	var segments []Segment
@@ -23,7 +23,7 @@ func Find(dir string) ([]Segment, error) {
 
 			offset, err := strconv.ParseInt(offsetStr, 10, 64)
 			if err != nil {
-				return nil, kleverr.Newf("parse offset: %w", err)
+				return nil, fmt.Errorf("find parse offset: %w", err)
 			}
 
 			segments = append(segments, New(dir, offset))
@@ -49,7 +49,7 @@ func Stat(segments []Segment, params index.Params) (Stats, error) {
 	for _, seg := range segments {
 		segStat, err := seg.Stat(params)
 		if err != nil {
-			return Stats{}, err
+			return Stats{}, fmt.Errorf("stat %d: %w", seg.Offset, err)
 		}
 
 		total.Segments += segStat.Segments
@@ -68,8 +68,11 @@ func CheckDir(dir string, params index.Params) error {
 	case len(segments) == 0:
 		return nil
 	default:
-		s := segments[len(segments)-1]
-		return s.Check(params)
+		seg := segments[len(segments)-1]
+		if err := seg.Check(params); err != nil {
+			return fmt.Errorf("check %d: %w", seg.Offset, err)
+		}
+		return nil
 	}
 }
 
@@ -82,31 +85,33 @@ func RecoverDir(dir string, params index.Params) error {
 	case len(segments) == 0:
 		return nil
 	default:
-		s := segments[len(segments)-1]
-		return s.Recover(params)
+		seg := segments[len(segments)-1]
+		if err := seg.Recover(params); err != nil {
+			return fmt.Errorf("recover %d: %w", seg.Offset, err)
+		}
+		return nil
 	}
 }
 
 func BackupDir(dir, target string) error {
-	segments, err := Find(dir)
-	switch {
+	switch segments, err := Find(dir); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
 		return err
-	}
+	default:
+		if err := os.MkdirAll(target, 0700); err != nil {
+			return fmt.Errorf("backup dir create: %w", err)
+		}
 
-	if err := os.MkdirAll(target, 0700); err != nil {
-		return kleverr.Newf("backup create dir: %w", err)
+		return Backup(segments, target)
 	}
-
-	return Backup(segments, target)
 }
 
 func Backup(segments []Segment, dir string) error {
 	for _, seg := range segments {
 		if err := seg.Backup(dir); err != nil {
-			return err
+			return fmt.Errorf("backup %d: %w", seg.Offset, err)
 		}
 	}
 
