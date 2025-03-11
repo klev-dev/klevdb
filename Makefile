@@ -32,5 +32,5 @@ bench-multi:
 
 .PHONY: update-libs
 update-libs:
-	go get -u github.com/klev-dev/kleverr@main
+	go get -u ./...
 	go mod tidy
