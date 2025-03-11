@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-
-	"github.com/klev-dev/kleverr"
 )
 
 var ErrCorrupted = errors.New("index corrupted")
@@ -24,12 +22,12 @@ type Writer struct {
 func OpenWriter(path string, opts Params) (*Writer, error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
-		return nil, kleverr.Newf("index open: %w", err)
+		return nil, fmt.Errorf("write index open: %w", err)
 	}
 
 	stat, err := f.Stat()
 	if err != nil {
-		return nil, kleverr.Newf("index stat: %w", err)
+		return nil, fmt.Errorf("write index stat: %w", err)
 	}
 
 	return &Writer{
@@ -57,7 +55,7 @@ func (w *Writer) Write(it Item) error {
 	}
 
 	if n, err := w.f.Write(w.buff); err != nil {
-		return kleverr.Newf("index write: %w", err)
+		return fmt.Errorf("write index: %w", err)
 	} else {
 		w.pos += int64(n)
 	}
@@ -71,14 +69,14 @@ func (w *Writer) Size() int64 {
 
 func (w *Writer) Sync() error {
 	if err := w.f.Sync(); err != nil {
-		return kleverr.Newf("index sync: %w", err)
+		return fmt.Errorf("write index sync: %w", err)
 	}
 	return nil
 }
 
 func (w *Writer) Close() error {
 	if err := w.f.Close(); err != nil {
-		return kleverr.Newf("index close: %w", err)
+		return fmt.Errorf("write index close: %w", err)
 	}
 	return nil
 }
@@ -109,13 +107,13 @@ func Write(path string, opts Params, index []Item) error {
 func Read(path string, opts Params) ([]Item, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, kleverr.Newf("index open: %w", err)
+		return nil, fmt.Errorf("read index open: %w", err)
 	}
 	defer f.Close()
 
 	stat, err := os.Stat(path)
 	if err != nil {
-		return nil, kleverr.Newf("index stat: %w", err)
+		return nil, fmt.Errorf("read index stat: %w", err)
 	}
 	dataSize := stat.Size()
 
@@ -126,7 +124,7 @@ func Read(path string, opts Params) ([]Item, error) {
 
 	data := make([]byte, dataSize)
 	if _, err = io.ReadFull(f, data); err != nil {
-		return nil, kleverr.Newf("index read: %w", err)
+		return nil, fmt.Errorf("read index: %w", err)
 	}
 
 	var keyOffset = opts.keyOffset()

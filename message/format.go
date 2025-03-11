@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"golang.org/x/exp/mmap"
-
-	"github.com/klev-dev/kleverr"
 )
 
 var ErrCorrupted = errors.New("log corrupted")
@@ -36,12 +34,12 @@ type Writer struct {
 func OpenWriter(path string) (*Writer, error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
-		return nil, kleverr.Newf("log open: %w", err)
+		return nil, fmt.Errorf("write log open: %w", err)
 	}
 
 	stat, err := f.Stat()
 	if err != nil {
-		return nil, kleverr.Newf("log stat: %w", err)
+		return nil, fmt.Errorf("write log stat: %w", err)
 	}
 
 	return &Writer{Path: path, f: f, pos: stat.Size()}, nil
@@ -74,7 +72,7 @@ func (w *Writer) Write(m Message) (int64, error) {
 
 	pos := w.pos
 	if n, err := w.f.Write(w.buff); err != nil {
-		return 0, kleverr.Newf("log write: %w", err)
+		return 0, fmt.Errorf("write log: %w", err)
 	} else {
 		w.pos += int64(n)
 	}
@@ -87,14 +85,14 @@ func (w *Writer) Size() int64 {
 
 func (w *Writer) Sync() error {
 	if err := w.f.Sync(); err != nil {
-		return kleverr.Newf("log sync: %w", err)
+		return fmt.Errorf("write log sync: %w", err)
 	}
 	return nil
 }
 
 func (w *Writer) Close() error {
 	if err := w.f.Close(); err != nil {
-		return kleverr.Newf("log close: %w", err)
+		return fmt.Errorf("write log close: %w", err)
 	}
 	return nil
 }
@@ -115,7 +113,7 @@ type Reader struct {
 func OpenReader(path string) (*Reader, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, kleverr.Newf("log open: %w", err)
+		return nil, fmt.Errorf("read log open: %w", err)
 	}
 
 	return &Reader{
@@ -127,7 +125,7 @@ func OpenReader(path string) (*Reader, error) {
 func OpenReaderMem(path string) (*Reader, error) {
 	f, err := mmap.Open(path)
 	if err != nil {
-		return nil, kleverr.Newf("log open: %w", err)
+		return nil, fmt.Errorf("read mem log open: %w", err)
 	}
 
 	return &Reader{
@@ -176,7 +174,7 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return -1, errShortHeader
 	default:
-		return -1, kleverr.Newf("header read: %w", err)
+		return -1, fmt.Errorf("read header: %w", err)
 	}
 
 	msg.Offset = int64(binary.BigEndian.Uint64(headerBytes[0:]))
@@ -200,7 +198,7 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 	case errors.Is(err, io.EOF):
 		return -1, errNoMessage
 	default:
-		return -1, kleverr.Newf("message read: %w", err)
+		return -1, fmt.Errorf("read message: %w", err)
 	}
 
 	actualCRC := crc32.Checksum(messageBytes, crc32cTable)
@@ -222,11 +220,11 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 func (r *Reader) Close() error {
 	if r.ra != nil {
 		if err := r.ra.Close(); err != nil {
-			return kleverr.Newf("log close: %w", err)
+			return fmt.Errorf("write mem log close: %w", err)
 		}
 	} else {
 		if err := r.r.Close(); err != nil {
-			return kleverr.Newf("log close: %w", err)
+			return fmt.Errorf("write log close: %w", err)
 		}
 	}
 	return nil

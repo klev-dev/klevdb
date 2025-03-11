@@ -16,7 +16,6 @@ import (
 
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
-	"github.com/klev-dev/kleverr"
 )
 
 func publishBatched(t *testing.T, l Log, msgs []Message, batchLen int) {
@@ -1556,7 +1555,7 @@ func testConcurrentPubsubRecent(t *testing.T) {
 		for ctx.Err() == nil {
 			next, msgs, err := s.Consume(offset, 32)
 			if err != nil {
-				return kleverr.Newf("could not consume offset %d: %w", offset, err)
+				return fmt.Errorf("could not consume offset %d: %w", offset, err)
 			}
 
 			if offset == next {
@@ -1591,11 +1590,7 @@ func testConcurrentPubsubRecent(t *testing.T) {
 		return nil
 	})
 
-	err = g.Wait()
-	if serr := kleverr.Get(err); serr != nil {
-		fmt.Println(serr.Print())
-	}
-	require.NoError(t, err)
+	require.NoError(t, g.Wait())
 }
 
 func testConcurrentConsume(t *testing.T) {
@@ -1742,9 +1737,5 @@ func testConcurrentGC(t *testing.T) {
 		return nil
 	})
 
-	err = g.Wait()
-	if serr := kleverr.Get(err); serr != nil {
-		fmt.Println(serr.Print())
-	}
-	require.NoError(t, err)
+	require.NoError(t, g.Wait())
 }
