@@ -3,6 +3,7 @@ package index
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 
@@ -10,6 +11,7 @@ import (
 )
 
 var ErrCorrupted = errors.New("index corrupted")
+var errIndexSize = fmt.Errorf("%w: unaligned index size", ErrCorrupted)
 
 type Writer struct {
 	opts      Params
@@ -119,7 +121,7 @@ func Read(path string, opts Params) ([]Item, error) {
 
 	itemSize := opts.Size()
 	if dataSize%itemSize > 0 {
-		return nil, kleverr.Newf("%w: unexpected data len %d", ErrCorrupted, dataSize)
+		return nil, errIndexSize
 	}
 
 	data := make([]byte, dataSize)
