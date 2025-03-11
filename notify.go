@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
-
-	"github.com/klev-dev/kleverr"
 )
 
 var ErrOffsetNotifyClosed = errors.New("offset notify already closed")
@@ -36,7 +34,7 @@ func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
 	b, ok := <-w.barrier
 	if !ok {
 		// already closed, return error
-		return kleverr.Ret(ErrOffsetNotifyClosed)
+		return ErrOffsetNotifyClosed
 	}
 
 	// probe the current offset
@@ -55,7 +53,7 @@ func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
 	case <-b:
 		return nil
 	case <-ctx.Done():
-		return kleverr.Ret(ctx.Err())
+		return ctx.Err()
 	}
 }
 
@@ -84,7 +82,7 @@ func (w *OffsetNotify) Close() error {
 	b, ok := <-w.barrier
 	if !ok {
 		// already closed, return an error
-		return kleverr.Ret(ErrOffsetNotifyClosed)
+		return ErrOffsetNotifyClosed
 	}
 
 	// close the current barrier, e.g. broadcasting update

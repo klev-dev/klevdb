@@ -2,6 +2,7 @@ package klevdb
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,8 +15,13 @@ import (
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
-	"github.com/klev-dev/kleverr"
 )
+
+var errNoKeyIndex = fmt.Errorf("%w by key", ErrNoIndex)
+var errKeyNotFound = fmt.Errorf("key %w", ErrNotFound)
+var errNoTimeIndex = fmt.Errorf("%w by time", ErrNoIndex)
+var errTimeNotFound = fmt.Errorf("time %w", ErrNotFound)
+var errDeleteRelative = fmt.Errorf("%w: delete relative offsets", message.ErrInvalidOffset)
 
 // Open create a log based on a dir and set of options
 func Open(dir string, opts Options) (result Log, err error) {
@@ -25,7 +31,7 @@ func Open(dir string, opts Options) (result Log, err error) {
 
 	if opts.CreateDirs {
 		if err := os.MkdirAll(dir, 0700); err != nil {
-			return nil, kleverr.Newf("could not create log dirs: %w", err)
+			return nil, fmt.Errorf("open create dirs: %w", err)
 		}
 	}
 
@@ -33,22 +39,22 @@ func Open(dir string, opts Options) (result Log, err error) {
 	if opts.Readonly {
 		switch ok, err := lock.TryRLock(); {
 		case err != nil:
-			return nil, kleverr.Newf("could not lock: %w", err)
+			return nil, fmt.Errorf("open read lock: %w", err)
 		case !ok:
-			return nil, kleverr.Newf("log already writing locked")
+			return nil, fmt.Errorf("open already writing locked")
 		}
 	} else {
 		switch ok, err := lock.TryLock(); {
 		case err != nil:
-			return nil, kleverr.Newf("could not lock: %w", err)
+			return nil, fmt.Errorf("open lock: %w", err)
 		case !ok:
-			return nil, kleverr.Newf("log already locked")
+			return nil, fmt.Errorf("open already locked")
 		}
 	}
 	defer func() {
 		if err != nil {
 			if lerr := lock.Unlock(); lerr != nil {
-				err = kleverr.Newf("%w: could not release lock: %w", err, lerr)
+				err = fmt.Errorf("%w: open release lock: %w", err, lerr)
 			}
 		}
 	}()
@@ -206,7 +212,7 @@ func (l *log) Consume(offset int64, maxCount int64) (int64, []message.Message, e
 
 func (l *log) ConsumeByKey(key []byte, offset int64, maxCount int64) (int64, []message.Message, error) {
 	if !l.opts.KeyIndex {
-		return OffsetInvalid, nil, kleverr.Newf("%w by key", ErrNoIndex)
+		return OffsetInvalid, nil, errNoKeyIndex
 	}
 
 	hash := index.KeyHashEncoded(index.KeyHash(key))
@@ -247,7 +253,7 @@ func (l *log) Get(offset int64) (message.Message, error) {
 
 func (l *log) GetByKey(key []byte) (message.Message, error) {
 	if !l.opts.KeyIndex {
-		return message.Invalid, kleverr.Newf("%w by key", ErrNoIndex)
+		return message.Invalid, errNoKeyIndex
 	}
 
 	hash := index.KeyHashEncoded(index.KeyHash(key))
@@ -269,7 +275,7 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 	}
 
 	// not in any segment, so just return the error
-	return message.Invalid, kleverr.Newf("key %w", message.ErrNotFound)
+	return message.Invalid, errKeyNotFound
 }
 
 func (l *log) OffsetByKey(key []byte) (int64, error) {
@@ -282,7 +288,7 @@ func (l *log) OffsetByKey(key []byte) (int64, error) {
 
 func (l *log) GetByTime(start time.Time) (message.Message, error) {
 	if !l.opts.TimeIndex {
-		return message.Invalid, kleverr.Newf("%w by time", ErrNoIndex)
+		return message.Invalid, errNoTimeIndex
 	}
 
 	ts := start.UnixMicro()
@@ -314,7 +320,7 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 		}
 	}
 
-	return message.Invalid, kleverr.Newf("time %w", message.ErrNotFound)
+	return message.Invalid, errTimeNotFound
 }
 
 func (l *log) OffsetByTime(start time.Time) (int64, time.Time, error) {
@@ -419,7 +425,7 @@ func (l *log) findDeleteReader(offsets map[int64]struct{}) (*reader, error) {
 	lowestOffset := orderedOffsets[0]
 
 	if lowestOffset < 0 {
-		return nil, kleverr.Newf("%w: cannot delete relative offsets", message.ErrInvalidOffset)
+		return nil, errDeleteRelative
 	}
 
 	l.readersMu.RLock()
@@ -544,7 +550,7 @@ func (l *log) Close() error {
 	}
 
 	if err := l.lock.Unlock(); err != nil {
-		return kleverr.Newf("could not release lock: %w", err)
+		return fmt.Errorf("close unlock: %w", err)
 	}
 
 	return nil
