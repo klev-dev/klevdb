@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"os"
@@ -14,6 +15,10 @@ import (
 )
 
 var ErrCorrupted = errors.New("log corrupted")
+var errShortHeader = fmt.Errorf("%w: short header", ErrCorrupted)
+var errShortMessage = fmt.Errorf("%w: short message", ErrCorrupted)
+var errNoMessage = fmt.Errorf("%w: no message", ErrCorrupted)
+var errCrcFailed = fmt.Errorf("%w: crc failed", ErrCorrupted)
 
 var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
@@ -169,7 +174,7 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 	case err == nil:
 		// all good, continue
 	case errors.Is(err, io.ErrUnexpectedEOF):
-		return -1, kleverr.Newf("%w: short header", ErrCorrupted)
+		return -1, errShortHeader
 	default:
 		return -1, kleverr.Newf("header read: %w", err)
 	}
@@ -191,16 +196,16 @@ func (r *Reader) read(position int64, msg *Message) (nextPosition int64, err err
 	case err == nil:
 		// all good, continue
 	case errors.Is(err, io.ErrUnexpectedEOF):
-		return -1, kleverr.Newf("%w: short message", ErrCorrupted)
+		return -1, errShortMessage
 	case errors.Is(err, io.EOF):
-		return -1, kleverr.Newf("%w: no message", ErrCorrupted)
+		return -1, errNoMessage
 	default:
 		return -1, kleverr.Newf("message read: %w", err)
 	}
 
 	actualCRC := crc32.Checksum(messageBytes, crc32cTable)
 	if expectedCRC != actualCRC {
-		return -1, kleverr.Newf("%w: checksum mismatch", ErrCorrupted)
+		return -1, errCrcFailed
 	}
 
 	if keySize > 0 {
