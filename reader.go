@@ -134,6 +134,7 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	positions, err := index.Keys(keyHash)
 	switch {
 	case err == nil:
+		break
 	case err == message.ErrNotFound:
 		nextOffset, err := index.GetNextOffset()
 		if err != nil {
