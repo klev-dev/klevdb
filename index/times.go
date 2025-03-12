@@ -10,7 +10,7 @@ import (
 
 var ErrTimeIndexEmpty = fmt.Errorf("%w: no time items", message.ErrInvalidOffset)
 var ErrTimeBeforeStart = errors.New("time before start")
-var ErrTimeAfterEnd = fmt.Errorf("%w: time after end", message.ErrInvalidOffset)
+var ErrTimeAfterEnd = errors.New("time after end")
 
 func Time(items []Item, ts int64) (int64, error) {
 	if len(items) == 0 {
