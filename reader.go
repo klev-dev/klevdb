@@ -435,17 +435,8 @@ func (ix *readerIndex) GetNextOffset() (int64, error) {
 
 func (ix *readerIndex) Consume(offset int64) (int64, int64, int64, error) {
 	position, maxPosition, err := index.Consume(ix.items, offset)
-	if err != nil && ix.head {
-		switch {
-		case err == index.ErrOffsetIndexEmpty:
-			if offset <= ix.nextOffset {
-				return -1, -1, ix.nextOffset, nil
-			}
-		case err == index.ErrOffsetAfterEnd:
-			if offset == ix.nextOffset {
-				return -1, -1, ix.nextOffset, nil
-			}
-		}
+	if (err == index.ErrOffsetIndexEmpty || err == index.ErrOffsetAfterEnd) && ix.head && offset <= ix.nextOffset {
+		return -1, -1, ix.nextOffset, nil
 	}
 	return position, maxPosition, offset, err
 }

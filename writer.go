@@ -272,12 +272,8 @@ func (ix *writerIndex) Consume(offset int64) (int64, int64, int64, error) {
 	defer ix.mu.RUnlock()
 
 	position, maxPosition, err := index.Consume(ix.items, offset)
-	if err == index.ErrOffsetIndexEmpty {
+	if err == index.ErrOffsetIndexEmpty || err == index.ErrOffsetAfterEnd {
 		if nextOffset := ix.nextOffset.Load(); offset <= nextOffset {
-			return -1, -1, nextOffset, nil
-		}
-	} else if err == index.ErrOffsetAfterEnd {
-		if nextOffset := ix.nextOffset.Load(); offset == nextOffset {
 			return -1, -1, nextOffset, nil
 		}
 	}
