@@ -20,11 +20,11 @@ type reader struct {
 
 	messages      *message.Reader
 	messagesMu    sync.RWMutex
-	messagesInuse int64
+	messagesInuse atomic.Int64
 
 	index           indexer
 	indexMu         sync.RWMutex
-	indexLastAccess int64
+	indexLastAccess atomic.Int64
 }
 
 type indexer interface {
@@ -108,7 +108,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
-	defer atomic.AddInt64(&r.messagesInuse, -1)
+	defer r.messagesInuse.Add(-1)
 
 	msgs, err := messages.Consume(position, maxPosition, maxCount)
 	if err != nil {
@@ -149,7 +149,7 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
-	defer atomic.AddInt64(&r.messagesInuse, -1)
+	defer r.messagesInuse.Add(-1)
 
 	var msgs []message.Message
 	for i := 0; i < len(positions); i++ {
@@ -194,7 +194,7 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 	if err != nil {
 		return message.Invalid, err
 	}
-	defer atomic.AddInt64(&r.messagesInuse, -1)
+	defer r.messagesInuse.Add(-1)
 
 	return messages.Get(position)
 }
@@ -214,7 +214,7 @@ func (r *reader) GetByKey(key, keyHash []byte, tctx int64) (message.Message, err
 	if err != nil {
 		return message.Invalid, err
 	}
-	defer atomic.AddInt64(&r.messagesInuse, -1)
+	defer r.messagesInuse.Add(-1)
 
 	for i := len(positions) - 1; i >= 0; i-- {
 		msg, err := messages.Get(positions[i])
@@ -244,7 +244,7 @@ func (r *reader) GetByTime(ts int64, tctx int64) (message.Message, error) {
 	if err != nil {
 		return message.Invalid, err
 	}
-	defer atomic.AddInt64(&r.messagesInuse, -1)
+	defer r.messagesInuse.Add(-1)
 
 	return messages.Get(position)
 }
@@ -297,13 +297,13 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 	return r, nil
 }
 
-func (r *reader) getIndexAt(tctx int64) (indexer, error) {
-	atomic.StoreInt64(&r.indexLastAccess, tctx)
+func (r *reader) getIndexNow() (indexer, error) {
+	r.indexLastAccess.Store(time.Now().UnixMicro())
 	return r.getIndexMarked()
 }
 
-func (r *reader) getIndexNow() (indexer, error) {
-	atomic.StoreInt64(&r.indexLastAccess, time.Now().UnixMicro())
+func (r *reader) getIndexAt(tctx int64) (indexer, error) {
+	r.indexLastAccess.Store(tctx)
 	return r.getIndexMarked()
 }
 
@@ -334,7 +334,7 @@ func (r *reader) getIndexMarked() (indexer, error) {
 func (r *reader) getMessages() (*message.Reader, error) {
 	r.messagesMu.RLock()
 	if msgs := r.messages; msgs != nil {
-		atomic.AddInt64(&r.messagesInuse, 1)
+		r.messagesInuse.Add(1)
 		r.messagesMu.RUnlock()
 		return msgs, nil
 	}
@@ -344,7 +344,7 @@ func (r *reader) getMessages() (*message.Reader, error) {
 	defer r.messagesMu.Unlock()
 
 	if msgs := r.messages; msgs != nil {
-		atomic.AddInt64(&r.messagesInuse, 1)
+		r.messagesInuse.Add(1)
 		return msgs, nil
 	}
 
@@ -354,7 +354,7 @@ func (r *reader) getMessages() (*message.Reader, error) {
 	}
 
 	r.messages = msgs
-	atomic.AddInt64(&r.messagesInuse, 1)
+	r.messagesInuse.Add(1)
 	return msgs, nil
 }
 
@@ -371,7 +371,7 @@ func (r *reader) GC(unusedFor time.Duration) error {
 		return nil
 	}
 
-	indexLastAccess := time.UnixMicro(atomic.LoadInt64(&r.indexLastAccess))
+	indexLastAccess := time.UnixMicro(r.indexLastAccess.Load())
 	if time.Since(indexLastAccess) < unusedFor {
 		// only unload segments unused for defined time
 		return nil
@@ -382,7 +382,7 @@ func (r *reader) GC(unusedFor time.Duration) error {
 	r.messagesMu.Lock()
 	defer r.messagesMu.Unlock()
 
-	if r.messages == nil || atomic.LoadInt64(&r.messagesInuse) > 0 {
+	if r.messages == nil || r.messagesInuse.Load() > 0 {
 		return nil
 	}
 
