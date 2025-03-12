@@ -259,6 +259,7 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 	}
 
 	hash := index.KeyHashEncoded(index.KeyHash(key))
+	tctx := time.Now().UnixMicro()
 
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
@@ -266,7 +267,7 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 	for i := len(l.readers) - 1; i >= 0; i-- {
 		rdr := l.readers[i]
 
-		switch msg, err := rdr.GetByKey(key, hash); {
+		switch msg, err := rdr.GetByKey(key, hash, tctx); {
 		case err == nil:
 			return msg, nil
 		case err == index.ErrKeyNotFound:
@@ -294,6 +295,7 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 	}
 
 	ts := start.UnixMicro()
+	tctx := time.Now().UnixMicro()
 
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
@@ -301,7 +303,7 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 	for i := len(l.readers) - 1; i >= 0; i-- {
 		rdr := l.readers[i]
 
-		switch msg, err := rdr.GetByTime(ts); {
+		switch msg, err := rdr.GetByTime(ts, tctx); {
 		case err == nil:
 			return msg, nil
 		case err == index.ErrTimeBeforeStart:
