@@ -75,7 +75,7 @@ func (r *reader) GetOffset() int64 {
 }
 
 func (r *reader) GetNextOffset() (int64, error) {
-	index, err := r.getIndex(time.Now().UnixMicro())
+	index, err := r.getIndexNow()
 	if err != nil {
 		return 0, err
 	}
@@ -83,7 +83,7 @@ func (r *reader) GetNextOffset() (int64, error) {
 }
 
 func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, error) {
-	index, err := r.getIndex(time.Now().UnixMicro())
+	index, err := r.getIndexNow()
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
@@ -118,7 +118,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 }
 
 func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
-	ix, err := r.getIndex(time.Now().UnixMicro())
+	ix, err := r.getIndexNow()
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
@@ -180,7 +180,7 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 }
 
 func (r *reader) Get(offset int64) (message.Message, error) {
-	index, err := r.getIndex(time.Now().UnixMicro())
+	index, err := r.getIndexNow()
 	if err != nil {
 		return message.Invalid, err
 	}
@@ -200,7 +200,7 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 }
 
 func (r *reader) GetByKey(key, keyHash []byte, tctx int64) (message.Message, error) {
-	ix, err := r.getIndex(tctx)
+	ix, err := r.getIndexAt(tctx)
 	if err != nil {
 		return message.Invalid, err
 	}
@@ -230,7 +230,7 @@ func (r *reader) GetByKey(key, keyHash []byte, tctx int64) (message.Message, err
 }
 
 func (r *reader) GetByTime(ts int64, tctx int64) (message.Message, error) {
-	index, err := r.getIndex(tctx)
+	index, err := r.getIndexAt(tctx)
 	if err != nil {
 		return message.Invalid, err
 	}
@@ -297,9 +297,17 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 	return r, nil
 }
 
-func (r *reader) getIndex(tctx int64) (indexer, error) {
+func (r *reader) getIndexAt(tctx int64) (indexer, error) {
 	atomic.StoreInt64(&r.indexLastAccess, tctx)
+	return r.getIndexMarked()
+}
 
+func (r *reader) getIndexNow() (indexer, error) {
+	atomic.StoreInt64(&r.indexLastAccess, time.Now().UnixMicro())
+	return r.getIndexMarked()
+}
+
+func (r *reader) getIndexMarked() (indexer, error) {
 	r.indexMu.RLock()
 	if ix := r.index; ix != nil {
 		defer r.indexMu.RUnlock()
