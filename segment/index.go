@@ -1,6 +1,8 @@
 package segment
 
 import (
+	"fmt"
+
 	"github.com/klev-dev/klevdb/message"
 )
 
@@ -47,6 +49,9 @@ func Consume[S ~[]O, O Offsetter](segments S, offset int64) (O, int) {
 	return segments[beginIndex], beginIndex
 }
 
+var ErrOffsetRelative = fmt.Errorf("%w: get relative offset", message.ErrInvalidOffset)
+var ErrOffsetBeforeStart = fmt.Errorf("%w: offset before start", message.ErrNotFound)
+
 func Get[S ~[]O, O Offsetter](segments S, offset int64) (O, int, error) {
 	switch offset {
 	case message.OffsetOldest:
@@ -61,9 +66,9 @@ func Get[S ~[]O, O Offsetter](segments S, offset int64) (O, int, error) {
 	case offset < beginSegment.GetOffset():
 		var v O
 		if beginSegment.GetOffset() == 0 {
-			return v, -1, message.ErrInvalidOffset
+			return v, -1, ErrOffsetRelative
 		}
-		return v, -1, message.ErrNotFound
+		return v, -1, ErrOffsetBeforeStart
 	case offset == beginSegment.GetOffset():
 		return beginSegment, 0, nil
 	}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,19 +20,19 @@ func TestTime(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
 		items := gen()
 		_, err := Time(items, 1)
-		require.ErrorIs(t, ErrIndexEmpty, err)
+		require.ErrorIs(t, ErrTimeIndexEmpty, err)
 	})
 
 	t.Run("Before", func(t *testing.T) {
 		items := gen(1)
 		_, err := Time(items, 0)
-		require.ErrorIs(t, message.ErrInvalidOffset, err)
+		require.ErrorIs(t, ErrTimeBeforeStart, err)
 	})
 
 	t.Run("After", func(t *testing.T) {
 		items := gen(1)
 		_, err := Time(items, 2)
-		require.ErrorIs(t, message.ErrNotFound, err)
+		require.ErrorIs(t, ErrTimeAfterEnd, err)
 	})
 
 	t.Run("Exact", func(t *testing.T) {

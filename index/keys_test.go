@@ -12,7 +12,7 @@ func TestKeys(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
 		keys := art.New()
 		pos, err := Keys(keys, KeyHashEncoded(1))
-		require.ErrorIs(t, message.ErrNotFound, err)
+		require.ErrorIs(t, err, message.ErrNotFound)
 		require.Empty(t, pos)
 	})
 
@@ -27,7 +27,7 @@ func TestKeys(t *testing.T) {
 		require.ElementsMatch(t, []int64{item.Position}, pos)
 
 		pos, err = Keys(keys, KeyHashEncoded(321))
-		require.ErrorIs(t, message.ErrNotFound, err)
+		require.ErrorIs(t, err, message.ErrNotFound)
 		require.Empty(t, pos)
 	})
 
@@ -48,7 +48,7 @@ func TestKeys(t *testing.T) {
 		require.ElementsMatch(t, []int64{item3.Position}, pos)
 
 		pos, err = Keys(keys, KeyHashEncoded(321))
-		require.ErrorIs(t, message.ErrNotFound, err)
+		require.ErrorIs(t, err, message.ErrNotFound)
 		require.Empty(t, pos)
 	})
 }

@@ -18,9 +18,9 @@ import (
 )
 
 var errNoKeyIndex = fmt.Errorf("%w by key", ErrNoIndex)
-var errKeyNotFound = fmt.Errorf("key %w", ErrNotFound)
+var errKeyNotFound = fmt.Errorf("key %w", message.ErrNotFound)
 var errNoTimeIndex = fmt.Errorf("%w by time", ErrNoIndex)
-var errTimeNotFound = fmt.Errorf("time %w", ErrNotFound)
+var errTimeNotFound = fmt.Errorf("time %w", message.ErrNotFound)
 var errDeleteRelative = fmt.Errorf("%w: delete relative offsets", message.ErrInvalidOffset)
 
 // Open create a log based on a dir and set of options
@@ -196,15 +196,13 @@ func (l *log) Consume(offset int64, maxCount int64) (int64, []message.Message, e
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
-	rdr, index := segment.Consume(l.readers, offset)
+	rdr, segmentIndex := segment.Consume(l.readers, offset)
 
 	nextOffset, msgs, err := rdr.Consume(offset, maxCount)
-	if err != nil && err == message.ErrInvalidOffset {
-		if index < len(l.readers)-1 {
-			// this is after the end, consume starting the next one
-			next := l.readers[index+1]
-			return next.Consume(message.OffsetOldest, maxCount)
-		}
+	if err == index.ErrOffsetAfterEnd && segmentIndex < len(l.readers)-1 {
+		// this is after the end, consume starting the next one
+		next := l.readers[segmentIndex+1]
+		return next.Consume(message.OffsetOldest, maxCount)
 	}
 
 	return nextOffset, msgs, err
@@ -243,12 +241,16 @@ func (l *log) Get(offset int64) (message.Message, error) {
 	l.readersMu.RLock()
 	defer l.readersMu.RUnlock()
 
-	rdr, _, err := segment.Get(l.readers, offset)
+	rdr, segmentIndex, err := segment.Get(l.readers, offset)
 	if err != nil {
 		return message.Invalid, err
 	}
 
-	return rdr.Get(offset)
+	msg, err := rdr.Get(offset)
+	if err == index.ErrOffsetAfterEnd && segmentIndex < len(l.readers)-1 {
+		return msg, index.ErrOffsetNotFound
+	}
+	return msg, err
 }
 
 func (l *log) GetByKey(key []byte) (message.Message, error) {
@@ -267,7 +269,7 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 		switch msg, err := rdr.GetByKey(key, hash); {
 		case err == nil:
 			return msg, nil
-		case err == message.ErrNotFound:
+		case err == index.ErrKeyNotFound:
 			// not in this segment, try the rest
 		default:
 			return message.Invalid, err
@@ -302,19 +304,18 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 		switch msg, err := rdr.GetByTime(ts); {
 		case err == nil:
 			return msg, nil
-		case err == message.ErrInvalidOffset:
+		case err == index.ErrTimeBeforeStart:
 			// not in this segment, try the rest
 			if i == 0 {
 				return rdr.Get(message.OffsetOldest)
 			}
-		case err == message.ErrNotFound:
+		case err == index.ErrTimeAfterEnd:
 			// time is between end of this and begin next
 			if i < len(l.readers)-1 {
 				nextRdr := l.readers[i+1]
 				return nextRdr.Get(message.OffsetOldest)
 			}
-
-			return message.Invalid, err
+			return message.Invalid, errTimeNotFound
 		default:
 			return message.Invalid, err
 		}

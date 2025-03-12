@@ -6,11 +6,14 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
-var ErrIndexEmpty = fmt.Errorf("%w: no items", message.ErrInvalidOffset)
+var ErrOffsetIndexEmpty = fmt.Errorf("%w: no offset items", message.ErrInvalidOffset)
+var ErrOffsetBeforeStart = fmt.Errorf("%w: offset before start", message.ErrNotFound)
+var ErrOffsetAfterEnd = fmt.Errorf("%w: offset after end", message.ErrInvalidOffset)
+var ErrOffsetNotFound = fmt.Errorf("%w: offset not found", message.ErrNotFound)
 
 func Consume(items []Item, offset int64) (int64, int64, error) {
 	if len(items) == 0 {
-		return 0, 0, ErrIndexEmpty
+		return 0, 0, ErrOffsetIndexEmpty
 	}
 
 	switch offset {
@@ -32,7 +35,7 @@ func Consume(items []Item, offset int64) (int64, int64, error) {
 	endItem := items[endIndex]
 	switch {
 	case offset > endItem.Offset:
-		return 0, 0, message.ErrInvalidOffset
+		return 0, 0, ErrOffsetAfterEnd
 	case offset == endItem.Offset:
 		return endItem.Position, endItem.Position, nil
 	}
@@ -55,7 +58,7 @@ func Consume(items []Item, offset int64) (int64, int64, error) {
 
 func Get(items []Item, offset int64) (int64, error) {
 	if len(items) == 0 {
-		return 0, ErrIndexEmpty
+		return 0, ErrOffsetIndexEmpty
 	}
 
 	switch offset {
@@ -69,7 +72,7 @@ func Get(items []Item, offset int64) (int64, error) {
 	beginItem := items[beginIndex]
 	switch {
 	case offset < beginItem.Offset:
-		return 0, message.ErrNotFound
+		return 0, ErrOffsetBeforeStart
 	case offset == beginItem.Offset:
 		return beginItem.Position, nil
 	}
@@ -78,7 +81,7 @@ func Get(items []Item, offset int64) (int64, error) {
 	endItem := items[endIndex]
 	switch {
 	case offset > endItem.Offset:
-		return 0, message.ErrNotFound
+		return 0, ErrOffsetAfterEnd
 	case offset == endItem.Offset:
 		return endItem.Position, nil
 	}
@@ -96,5 +99,5 @@ func Get(items []Item, offset int64) (int64, error) {
 		}
 	}
 
-	return 0, message.ErrNotFound
+	return 0, ErrOffsetNotFound
 }

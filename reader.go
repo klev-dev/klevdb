@@ -118,25 +118,25 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 }
 
 func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
-	index, err := r.getIndex()
+	ix, err := r.getIndex()
 	if err != nil {
 		return OffsetInvalid, nil, err
 	}
 
 	if offset == OffsetNewest {
-		nextOffset, err := index.GetNextOffset()
+		nextOffset, err := ix.GetNextOffset()
 		if err != nil {
 			return OffsetInvalid, nil, err
 		}
 		return nextOffset, nil, nil
 	}
 
-	positions, err := index.Keys(keyHash)
+	positions, err := ix.Keys(keyHash)
 	switch {
 	case err == nil:
 		break
-	case err == message.ErrNotFound:
-		nextOffset, err := index.GetNextOffset()
+	case err == index.ErrKeyNotFound:
+		nextOffset, err := ix.GetNextOffset()
 		if err != nil {
 			return OffsetInvalid, nil, err
 		}
@@ -169,7 +169,7 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	}
 
 	if len(msgs) == 0 {
-		nextOffset, err := index.GetNextOffset()
+		nextOffset, err := ix.GetNextOffset()
 		if err != nil {
 			return OffsetInvalid, nil, err
 		}
@@ -200,12 +200,12 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 }
 
 func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
-	index, err := r.getIndex()
+	ix, err := r.getIndex()
 	if err != nil {
 		return message.Invalid, err
 	}
 
-	positions, err := index.Keys(keyHash)
+	positions, err := ix.Keys(keyHash)
 	if err != nil {
 		return message.Invalid, err
 	}
@@ -226,7 +226,7 @@ func (r *reader) GetByKey(key, keyHash []byte) (message.Message, error) {
 		}
 	}
 
-	return message.Invalid, message.ErrNotFound
+	return message.Invalid, index.ErrKeyNotFound
 }
 
 func (r *reader) GetByTime(ts int64) (message.Message, error) {
@@ -437,11 +437,11 @@ func (ix *readerIndex) Consume(offset int64) (int64, int64, int64, error) {
 	position, maxPosition, err := index.Consume(ix.items, offset)
 	if err != nil && ix.head {
 		switch {
-		case err == index.ErrIndexEmpty:
+		case err == index.ErrOffsetIndexEmpty:
 			if offset <= ix.nextOffset {
 				return -1, -1, ix.nextOffset, nil
 			}
-		case err == message.ErrInvalidOffset:
+		case err == index.ErrOffsetAfterEnd:
 			if offset == ix.nextOffset {
 				return -1, -1, ix.nextOffset, nil
 			}
@@ -452,7 +452,7 @@ func (ix *readerIndex) Consume(offset int64) (int64, int64, int64, error) {
 
 func (ix *readerIndex) Get(offset int64) (int64, error) {
 	position, err := index.Get(ix.items, offset)
-	if err == message.ErrNotFound && ix.head && offset >= ix.nextOffset {
+	if err == index.ErrOffsetAfterEnd && ix.head && offset >= ix.nextOffset {
 		return -1, message.ErrInvalidOffset
 	}
 	return position, err

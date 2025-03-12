@@ -2,12 +2,14 @@ package index
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
 
-	art "github.com/plar/go-adaptive-radix-tree/v2"
-
 	"github.com/klev-dev/klevdb/message"
+	art "github.com/plar/go-adaptive-radix-tree/v2"
 )
+
+var ErrKeyNotFound = fmt.Errorf("key: %w", message.ErrNotFound)
 
 func KeyHash(key []byte) uint64 {
 	hasher := fnv.New64a()
@@ -41,5 +43,5 @@ func Keys(keys art.Tree, keyHash []byte) ([]int64, error) {
 		return v.([]int64), nil
 	}
 
-	return nil, message.ErrNotFound
+	return nil, ErrKeyNotFound
 }
