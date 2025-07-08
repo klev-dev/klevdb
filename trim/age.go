@@ -75,3 +75,12 @@ func ByAge(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struc
 	}
 	return l.Delete(offsets)
 }
+
+// ByAgeMulti is similar to ByAge, but will try to remove messages from multiple segments
+func ByAgeMulti(ctx context.Context, l klevdb.Log, before time.Time, backoff klevdb.DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindByAge(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return klevdb.DeleteMulti(ctx, l, offsets, backoff)
+}

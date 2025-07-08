@@ -61,3 +61,12 @@ func ByOffset(ctx context.Context, l klevdb.Log, before int64) (map[int64]struct
 	}
 	return l.Delete(offsets)
 }
+
+// ByOffsetMulti is similar to ByOffset, but will try to remove messages from multiple segments
+func ByOffsetMulti(ctx context.Context, l klevdb.Log, before int64, backoff klevdb.DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindByOffset(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return klevdb.DeleteMulti(ctx, l, offsets, backoff)
+}

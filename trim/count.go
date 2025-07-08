@@ -64,3 +64,12 @@ func ByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}, in
 	}
 	return l.Delete(offsets)
 }
+
+// ByCountMulti is similar to ByCount, but will try to remove messages from multiple segments
+func ByCountMulti(ctx context.Context, l klevdb.Log, max int, backoff klevdb.DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindByCount(ctx, l, max)
+	if err != nil {
+		return nil, 0, err
+	}
+	return klevdb.DeleteMulti(ctx, l, offsets, backoff)
+}

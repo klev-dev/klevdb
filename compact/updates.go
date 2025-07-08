@@ -67,3 +67,12 @@ func Updates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]str
 	}
 	return l.Delete(offsets)
 }
+
+// UpdatesMulti is similar to Updates, but will try to remove messages from multiple segments
+func UpdatesMulti(ctx context.Context, l klevdb.Log, before time.Time, backoff klevdb.DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindUpdates(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return klevdb.DeleteMulti(ctx, l, offsets, backoff)
+}

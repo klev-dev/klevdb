@@ -63,3 +63,12 @@ func BySize(ctx context.Context, l klevdb.Log, sz int64) (map[int64]struct{}, in
 	}
 	return l.Delete(offsets)
 }
+
+// BySizeMulti is similar to BySize, but will try to remove messages from multiple segments
+func BySizeMulti(ctx context.Context, l klevdb.Log, sz int64, backoff klevdb.DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindBySize(ctx, l, sz)
+	if err != nil {
+		return nil, 0, err
+	}
+	return klevdb.DeleteMulti(ctx, l, offsets, backoff)
+}
