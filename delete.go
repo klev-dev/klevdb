@@ -17,11 +17,8 @@ type DeleteMultiBackoff func(context.Context) error
 // it returns the associated error
 func DeleteMultiWithWait(d time.Duration) DeleteMultiBackoff {
 	return func(ctx context.Context) error {
-		t := time.NewTimer(d)
-		defer t.Stop()
-
 		select {
-		case <-t.C:
+		case <-time.After(d):
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
