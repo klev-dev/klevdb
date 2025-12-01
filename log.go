@@ -267,10 +267,10 @@ func (l *log) GetByKey(key []byte) (message.Message, error) {
 	for i := len(l.readers) - 1; i >= 0; i-- {
 		rdr := l.readers[i]
 
-		switch msg, err := rdr.GetByKey(key, hash, tctx); {
-		case err == nil:
+		switch msg, err := rdr.GetByKey(key, hash, tctx); err {
+		case nil:
 			return msg, nil
-		case err == index.ErrKeyNotFound:
+		case index.ErrKeyNotFound:
 			// not in this segment, try the rest
 		default:
 			return message.Invalid, err
@@ -303,15 +303,15 @@ func (l *log) GetByTime(start time.Time) (message.Message, error) {
 	for i := len(l.readers) - 1; i >= 0; i-- {
 		rdr := l.readers[i]
 
-		switch msg, err := rdr.GetByTime(ts, tctx); {
-		case err == nil:
+		switch msg, err := rdr.GetByTime(ts, tctx); err {
+		case nil:
 			return msg, nil
-		case err == index.ErrTimeBeforeStart:
+		case index.ErrTimeBeforeStart:
 			// not in this segment, try the rest
 			if i == 0 {
 				return rdr.Get(message.OffsetOldest)
 			}
-		case err == index.ErrTimeAfterEnd:
+		case index.ErrTimeAfterEnd:
 			// time is between end of this and begin next
 			if i < len(l.readers)-1 {
 				nextRdr := l.readers[i+1]

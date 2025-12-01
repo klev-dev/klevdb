@@ -50,14 +50,14 @@ func (l *tlogBlocking[K, V]) ConsumeBlocking(ctx context.Context, offset int64, 
 	if err := l.notify.Wait(ctx, offset); err != nil {
 		return 0, nil, err
 	}
-	return l.TLog.Consume(offset, maxCount)
+	return l.Consume(offset, maxCount)
 }
 
 func (l *tlogBlocking[K, V]) ConsumeByKeyBlocking(ctx context.Context, key K, empty bool, offset int64, maxCount int64) (int64, []TMessage[K, V], error) {
 	if err := l.notify.Wait(ctx, offset); err != nil {
 		return 0, nil, err
 	}
-	return l.TLog.ConsumeByKey(key, empty, offset, maxCount)
+	return l.ConsumeByKey(key, empty, offset, maxCount)
 }
 
 func (l *tlogBlocking[K, V]) Close() error {

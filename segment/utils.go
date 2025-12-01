@@ -22,7 +22,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("copy src open: %w", err)
 	}
-	defer fsrc.Close()
+	defer func() { _ = fsrc.Close() }()
 
 	stat, err := fsrc.Stat()
 	if err != nil {
@@ -43,7 +43,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("copy dst open: %w", err)
 	}
-	defer fdst.Close()
+	defer func() { _ = fdst.Close() }() // ignoring since its only applicable if an error has happened
 
 	switch n, err := io.Copy(fdst, fsrc); {
 	case err != nil:

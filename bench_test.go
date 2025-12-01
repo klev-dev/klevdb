@@ -26,7 +26,7 @@ func BenchmarkMulti(b *testing.B) {
 }
 
 func MkdirBench(b *testing.B) string {
-	name := strings.Replace(b.Name(), "/", "_", -1)
+	name := strings.ReplaceAll(b.Name(), "/", "_")
 
 	currentDir, err := os.Getwd()
 	require.NoError(b, err)

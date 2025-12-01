@@ -68,7 +68,7 @@ func (s Segment) Check(params index.Params) error {
 	if err != nil {
 		return err
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	var position, indexTime int64
 	var logIndex []index.Item
@@ -110,13 +110,13 @@ func (s Segment) Recover(params index.Params) error {
 	if err != nil {
 		return err
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	restore, err := message.OpenWriter(s.Log + ".recover")
 	if err != nil {
 		return err
 	}
-	defer restore.Close()
+	defer func() { _ = restore.Close() }() // ignoring since its only applicable if an error has happened
 
 	var position, indexTime int64
 	var corrupted = false
@@ -217,7 +217,7 @@ func (s Segment) Reindex(params index.Params) ([]index.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	return s.ReindexReader(params, log)
 }
@@ -346,13 +346,13 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 	if err != nil {
 		return nil, err
 	}
-	defer srcLog.Close()
+	defer func() { _ = srcLog.Close() }()
 
 	dstLog, err := message.OpenWriter(dst.Log)
 	if err != nil {
 		return nil, err
 	}
-	defer dstLog.Close()
+	defer func() { _ = dstLog.Close() }() // ignoring since its only applicable if an error has happened
 
 	result.SurviveOffsets = map[int64]struct{}{}
 	result.DeletedOffsets = map[int64]struct{}{}

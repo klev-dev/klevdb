@@ -93,7 +93,7 @@ func Write(path string, opts Params, index []Item) error {
 	if err != nil {
 		return err
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }() // ignoring since its only applicable if an error has happened
 
 	for _, item := range index {
 		if err := w.Write(item); err != nil {
@@ -109,7 +109,7 @@ func Read(path string, opts Params) ([]Item, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read index open: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	stat, err := os.Stat(path)
 	if err != nil {

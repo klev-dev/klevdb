@@ -132,10 +132,10 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	}
 
 	positions, err := ix.Keys(keyHash)
-	switch {
-	case err == nil:
+	switch err {
+	case nil:
 		break
-	case err == index.ErrKeyNotFound:
+	case index.ErrKeyNotFound:
 		nextOffset, err := ix.GetNextOffset()
 		if err != nil {
 			return OffsetInvalid, nil, err
@@ -152,8 +152,8 @@ func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int6
 	defer r.messagesInuse.Add(-1)
 
 	var msgs []message.Message
-	for i := 0; i < len(positions); i++ {
-		msg, err := messages.Get(positions[i])
+	for _, position := range positions {
+		msg, err := messages.Get(position)
 		if err != nil {
 			return OffsetInvalid, nil, err
 		}
