@@ -2,19 +2,20 @@ package segment
 
 import (
 	"crypto/rand"
+	"encoding/base32"
 	"fmt"
 	"io"
 	"os"
-
-	"github.com/mr-tron/base58"
 )
+
+var randEncode = base32.NewEncoding("0123456789abcdefghijklmnopqrstuv").WithPadding(base32.NoPadding)
 
 func randStr(length int) (string, error) {
 	k := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, k); err != nil {
 		return "", fmt.Errorf("rand read: %w", err)
 	}
-	return base58.Encode(k), nil
+	return randEncode.EncodeToString(k), nil
 }
 
 func copyFile(src, dst string) error {

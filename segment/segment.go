@@ -269,7 +269,7 @@ func (s Segment) Backup(targetDir string) error {
 }
 
 func (s Segment) ForRewrite() (Segment, error) {
-	randStr, err := randStr(8)
+	randStr, err := randStr(5)
 	if err != nil {
 		return Segment{}, err
 	}

@@ -4,7 +4,6 @@ go 1.24.0
 
 require (
 	github.com/gofrs/flock v0.13.0
-	github.com/mr-tron/base58 v1.2.0
 	github.com/plar/go-adaptive-radix-tree/v2 v2.0.4
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39
