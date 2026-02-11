@@ -23,7 +23,7 @@ var errNoTimeIndex = fmt.Errorf("%w by time", ErrNoIndex)
 var errTimeNotFound = fmt.Errorf("time %w", message.ErrNotFound)
 var errDeleteRelative = fmt.Errorf("%w: delete relative offsets", message.ErrInvalidOffset)
 
-// Open create a log based on a dir and set of options
+// Open opens or creates a [Log] based on a dir and set of options
 func Open(dir string, opts Options) (result Log, err error) {
 	if opts.Rollover == 0 {
 		opts.Rollover = 1024 * 1024

@@ -2,6 +2,7 @@ package klevdb
 
 import "time"
 
+// TMessage represents a typed [Message]
 type TMessage[K any, V any] struct {
 	Offset     int64
 	Time       time.Time
@@ -11,7 +12,7 @@ type TMessage[K any, V any] struct {
 	ValueEmpty bool
 }
 
-// TLog is a typed log
+// TLog is a typed [Log] which encodes/decodes keys and values to bytes.
 type TLog[K any, V any] interface {
 	// Publish see [Log.Publish]
 	Publish(messages []TMessage[K, V]) (nextOffset int64, err error)

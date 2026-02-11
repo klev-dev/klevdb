@@ -7,9 +7,8 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-// DeleteMultiBackoff is call on each iteration of
-// DeleteMulti to give applications opportunity to not overload
-// the target log with deletes
+// DeleteMultiBackoff is call on each iteration of [DeleteMulti] to give applications
+// opportunity to not overload the target log with deletes
 type DeleteMultiBackoff func(context.Context) error
 
 // DeleteMultiWithWait returns a backoff func that sleeps/waits
@@ -27,16 +26,13 @@ func DeleteMultiWithWait(d time.Duration) DeleteMultiBackoff {
 }
 
 // DeleteMulti tries to delete all messages with offsets
-//
-//	from the log and returns the amount of storage deleted
+// from the log and returns the amount of storage deleted
 //
 // If error is encountered, it will return the deleted offsets
+// and size, together with the error
 //
-//	and size, together with the error
-//
-// DeleteMultiBackoff is called on each iteration to give
-//
-//	others a chanse to work with the log, while being deleted
+// [DeleteMultiBackoff] is called on each iteration to give
+// others a chanse to work with the log, while being deleted
 func DeleteMulti(ctx context.Context, l Log, offsets map[int64]struct{}, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
 	var deletedOffsets = map[int64]struct{}{}
 	var deletedSize int64

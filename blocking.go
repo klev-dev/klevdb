@@ -2,18 +2,18 @@ package klevdb
 
 import "context"
 
-// BlockingLog enhances log adding blocking consume
+// BlockingLog enhances [Log] adding blocking consume
 type BlockingLog interface {
 	Log
 
-	// ConsumeBlocking is similar to Consume, but if offset is equal to the next offset it will block until next message is produced
+	// ConsumeBlocking is similar to [Consume], but if offset is equal to the next offset it will block until next message is produced
 	ConsumeBlocking(ctx context.Context, offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
 
-	// ConsumeByKeyBlocking is similar to ConsumeBlocking, but only returns messages matching the key
+	// ConsumeByKeyBlocking is similar to [ConsumeBlocking], but only returns messages matching the key
 	ConsumeByKeyBlocking(ctx context.Context, key []byte, offset int64, maxCount int64) (nextOffset int64, messages []Message, err error)
 }
 
-// OpenBlocking opens log and wraps it with support for blocking consume
+// OpenBlocking opens a [Log] and wraps it with support for blocking consume
 func OpenBlocking(dir string, opts Options) (BlockingLog, error) {
 	l, err := Open(dir, opts)
 	if err != nil {
@@ -22,7 +22,7 @@ func OpenBlocking(dir string, opts Options) (BlockingLog, error) {
 	return WrapBlocking(l)
 }
 
-// WrapBlocking wraps log with support for blocking consume
+// WrapBlocking wraps a [Log] with support for blocking consume
 func WrapBlocking(l Log) (BlockingLog, error) {
 	next, err := l.NextOffset()
 	if err != nil {

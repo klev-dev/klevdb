@@ -2,7 +2,7 @@ package klevdb
 
 import "context"
 
-// TBlockingLog enhances tlog adding blocking consume
+// TBlockingLog enhances [TLog] adding blocking consume
 type TBlockingLog[K any, V any] interface {
 	TLog[K, V]
 
@@ -13,7 +13,7 @@ type TBlockingLog[K any, V any] interface {
 	ConsumeByKeyBlocking(ctx context.Context, key K, empty bool, offset int64, maxCount int64) (nextOffset int64, messages []TMessage[K, V], err error)
 }
 
-// OpenBlocking opens tlog and wraps it with support for blocking consume
+// OpenTBlocking opens tlog and wraps it with support for blocking consume
 func OpenTBlocking[K any, V any](dir string, opts Options, keyCodec Codec[K], valueCodec Codec[V]) (TBlockingLog[K, V], error) {
 	l, err := OpenT(dir, opts, keyCodec, valueCodec)
 	if err != nil {
@@ -22,7 +22,7 @@ func OpenTBlocking[K any, V any](dir string, opts Options, keyCodec Codec[K], va
 	return WrapTBlocking(l)
 }
 
-// WrapBlocking wraps tlog with support for blocking consume
+// WrapTBlocking wraps tlog with support for blocking consume
 func WrapTBlocking[K any, V any](l TLog[K, V]) (TBlockingLog[K, V], error) {
 	next, err := l.NextOffset()
 	if err != nil {
