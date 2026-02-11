@@ -3,14 +3,14 @@ package klevdb
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/gofrs/flock"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
@@ -423,7 +423,7 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 }
 
 func (l *log) findDeleteReader(offsets map[int64]struct{}) (*reader, error) {
-	orderedOffsets := maps.Keys(offsets)
+	orderedOffsets := slices.Collect(maps.Keys(offsets))
 	slices.Sort(orderedOffsets)
 	lowestOffset := orderedOffsets[0]
 

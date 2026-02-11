@@ -4,11 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
-
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
+	"slices"
 
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
@@ -328,7 +327,7 @@ type RewriteSegment struct {
 }
 
 func (r *RewriteSegment) GetNewSegment() Segment {
-	orderedOffsets := maps.Keys(r.SurviveOffsets)
+	orderedOffsets := slices.Collect(maps.Keys(r.SurviveOffsets))
 	slices.Sort(orderedOffsets)
 	lowestOffset := orderedOffsets[0]
 	return New(r.Segment.Dir, lowestOffset)

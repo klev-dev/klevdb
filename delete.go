@@ -2,9 +2,8 @@ package klevdb
 
 import (
 	"context"
+	"maps"
 	"time"
-
-	"golang.org/x/exp/maps"
 )
 
 // DeleteMultiBackoff is call on each iteration of [DeleteMulti] to give applications

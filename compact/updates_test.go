@@ -2,13 +2,13 @@ package compact
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 func TestUpdates(t *testing.T) {
