@@ -1,4 +1,4 @@
-package klevdb
+package notify
 
 import (
 	"context"
@@ -11,14 +11,14 @@ import (
 
 func TestNotify(t *testing.T) {
 	t.Run("unblock", func(t *testing.T) {
-		n := NewOffsetNotify(10)
+		n := NewOffset(10)
 
 		err := n.Wait(context.TODO(), 5)
 		require.NoError(t, err)
 	})
 
 	t.Run("blocked", func(t *testing.T) {
-		n := NewOffsetNotify(10)
+		n := NewOffset(10)
 		ch := make(chan struct{})
 		var wg sync.WaitGroup
 
@@ -38,7 +38,7 @@ func TestNotify(t *testing.T) {
 	})
 
 	t.Run("cancel", func(t *testing.T) {
-		n := NewOffsetNotify(10)
+		n := NewOffset(10)
 		ch := make(chan struct{})
 		var wg sync.WaitGroup
 		ctx, cancel := context.WithCancel(context.TODO())
@@ -60,7 +60,7 @@ func TestNotify(t *testing.T) {
 	})
 
 	t.Run("close", func(t *testing.T) {
-		n := NewOffsetNotify(10)
+		n := NewOffset(10)
 		ch := make(chan struct{})
 		var wg sync.WaitGroup
 
@@ -80,7 +80,7 @@ func TestNotify(t *testing.T) {
 	})
 
 	t.Run("close_err", func(t *testing.T) {
-		n := NewOffsetNotify(10)
+		n := NewOffset(10)
 		err := n.Close()
 		require.NoError(t, err)
 

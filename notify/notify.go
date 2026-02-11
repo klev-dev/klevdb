@@ -1,4 +1,4 @@
-package klevdb
+package notify
 
 import (
 	"context"
@@ -8,13 +8,13 @@ import (
 
 var ErrOffsetNotifyClosed = errors.New("offset notify already closed")
 
-type OffsetNotify struct {
+type Offset struct {
 	nextOffset atomic.Int64
 	barrier    chan chan struct{}
 }
 
-func NewOffsetNotify(nextOffset int64) *OffsetNotify {
-	w := &OffsetNotify{
+func NewOffset(nextOffset int64) *Offset {
+	w := &Offset{
 		barrier: make(chan chan struct{}, 1),
 	}
 
@@ -24,7 +24,7 @@ func NewOffsetNotify(nextOffset int64) *OffsetNotify {
 	return w
 }
 
-func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
+func (w *Offset) Wait(ctx context.Context, offset int64) error {
 	// quick path, just load and check
 	if w.nextOffset.Load() > offset {
 		return nil
@@ -57,7 +57,7 @@ func (w *OffsetNotify) Wait(ctx context.Context, offset int64) error {
 	}
 }
 
-func (w *OffsetNotify) Set(nextOffset int64) {
+func (w *Offset) Set(nextOffset int64) {
 	// acquire current barrier
 	b, ok := <-w.barrier
 	if !ok {
@@ -77,7 +77,7 @@ func (w *OffsetNotify) Set(nextOffset int64) {
 	w.barrier <- make(chan struct{})
 }
 
-func (w *OffsetNotify) Close() error {
+func (w *Offset) Close() error {
 	// acquire current barrier
 	b, ok := <-w.barrier
 	if !ok {

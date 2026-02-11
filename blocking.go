@@ -1,6 +1,10 @@
 package klevdb
 
-import "context"
+import (
+	"context"
+
+	"github.com/klev-dev/klevdb/notify"
+)
 
 // BlockingLog enhances [Log] adding blocking consume
 type BlockingLog interface {
@@ -28,12 +32,12 @@ func WrapBlocking(l Log) (BlockingLog, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &blockingLog{l, NewOffsetNotify(next)}, nil
+	return &blockingLog{l, notify.NewOffset(next)}, nil
 }
 
 type blockingLog struct {
 	Log
-	notify *OffsetNotify
+	notify *notify.Offset
 }
 
 func (l *blockingLog) Publish(messages []Message) (int64, error) {
