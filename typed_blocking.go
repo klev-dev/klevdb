@@ -6,10 +6,10 @@ import "context"
 type TBlockingLog[K any, V any] interface {
 	TLog[K, V]
 
-	// ConsumeBlocking see BlockingLog.ConsumeBlocking
+	// ConsumeBlocking see [BlockingLog.ConsumeBlocking]
 	ConsumeBlocking(ctx context.Context, offset int64, maxCount int64) (nextOffset int64, messages []TMessage[K, V], err error)
 
-	// ConsumeByKeyBlocking see BlockingLog.ConsumeByKeyBlocking
+	// ConsumeByKeyBlocking see [BlockingLog.ConsumeByKeyBlocking]
 	ConsumeByKeyBlocking(ctx context.Context, key K, empty bool, offset int64, maxCount int64) (nextOffset int64, messages []TMessage[K, V], err error)
 }
 
