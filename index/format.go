@@ -88,12 +88,16 @@ func (w *Writer) SyncAndClose() error {
 	return w.Close()
 }
 
-func Write(path string, opts Params, index []Item) error {
+func Write(path string, opts Params, index []Item) (retErr error) {
 	w, err := OpenWriter(path, opts)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = w.Close() }() // ignoring since its only applicable if an error has happened
+	defer func() {
+		if retErr != nil {
+			_ = w.Close()
+		}
+	}()
 
 	for _, item := range index {
 		if err := w.Write(item); err != nil {

@@ -47,7 +47,7 @@ func (l *tlogBlocking[K, V]) Publish(tmessages []TMessage[K, V]) (int64, error) 
 	}
 
 	l.notify.Set(nextOffset)
-	return nextOffset, err
+	return nextOffset, nil
 }
 
 func (l *tlogBlocking[K, V]) ConsumeBlocking(ctx context.Context, offset int64, maxCount int64) (int64, []TMessage[K, V], error) {
