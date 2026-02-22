@@ -344,13 +344,19 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	l.deleteMu.Lock()
 	defer l.deleteMu.Unlock()
 
+	return l.delete(offsets)
+}
+
+func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, error) {
 	rdr, err := l.findDeleteReader(offsets)
 	if err != nil {
 		return nil, 0, err
 	}
 
+	wasWriter := false
 	l.writerMu.Lock()
 	if l.writer.reader == rdr {
+		wasWriter = true
 		if err := l.writer.Sync(); err != nil {
 			l.writerMu.Unlock()
 			return nil, 0, err
@@ -395,6 +401,14 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 		return rs.DeletedOffsets, rs.DeletedSize, nil
 	}
 	l.writerMu.Unlock()
+
+	if wasWriter {
+		// A writing segment transformed into a reader, retry deleting
+		if err := rs.Segment.Remove(); err != nil {
+			return nil, 0, err
+		}
+		return l.delete(offsets)
+	}
 
 	// we are deleting in a reader segment
 	l.readersMu.Lock()

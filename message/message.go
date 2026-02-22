@@ -47,7 +47,7 @@ func Gen(count int) []Message {
 	for i := range msgs {
 		msgs[i] = Message{
 			Time:  time.Date(2023, 1, 1, 0, 0, i, 0, time.UTC),
-			Key:   []byte(fmt.Sprintf("%10d", i)),
+			Key:   fmt.Appendf(nil, "%10d", i),
 			Value: []byte(strings.Repeat(" ", 128)),
 		}
 	}
