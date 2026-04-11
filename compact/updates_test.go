@@ -133,7 +133,7 @@ func TestUpdates(t *testing.T) {
 		off, cmp, err := Updates(context.TODO(), l, nmsgs[2].Time)
 		require.NoError(t, err)
 		require.Len(t, off, 3)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			require.Contains(t, off, int64(i))
 		}
 		require.Equal(t, l.Size(msgs[0])*3, cmp)

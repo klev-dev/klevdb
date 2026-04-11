@@ -62,10 +62,7 @@ func benchmarkPublish(b *testing.B) {
 				b.ResetTimer()
 
 				for i := 0; i < b.N; i += bn {
-					top := i + bn
-					if top > b.N {
-						top = b.N
-					}
+					top := min(i+bn, b.N)
 
 					if _, err := s.Publish(msgs[i:top]); err != nil {
 						b.Fatal(err)
@@ -92,13 +89,10 @@ func benchmarkPublishMulti(b *testing.B) {
 	b.ResetTimer()
 
 	g := new(errgroup.Group)
-	for k := 0; k < 10; k++ {
+	for range 10 {
 		g.Go(func() error {
 			for i := 0; i < b.N; i += 4 {
-				top := i + 4
-				if top > b.N {
-					top = b.N
-				}
+				top := min(i+4, b.N)
 				if _, err := s.Publish(msgs[i:top]); err != nil {
 					return err
 				}
@@ -114,10 +108,7 @@ func benchmarkPublishMulti(b *testing.B) {
 func fillLog(b *testing.B, l Log) []Message {
 	msgs := message.Gen(b.N)
 	for i := 0; i < b.N; i += 4 {
-		top := i + 4
-		if top > b.N {
-			top = b.N
-		}
+		top := min(i+4, b.N)
 		if _, err := l.Publish(msgs[i:top]); err != nil {
 			b.Fatal(err)
 		}
@@ -237,7 +228,7 @@ func benchmarkConsumeMulti(b *testing.B) {
 	b.ResetTimer()
 
 	g := new(errgroup.Group)
-	for k := 0; k < 10; k++ {
+	for range 10 {
 		g.Go(func() error {
 			for i := 0; i < b.N; i += 4 {
 				if _, _, err := s.Consume(int64(i), 4); err != nil {
@@ -384,10 +375,7 @@ func benchmarkGetKeyMulti(b *testing.B) {
 
 	msgs := message.Gen(b.N)
 	for i := 0; i < b.N; i += 10 {
-		top := i + 10
-		if top > b.N {
-			top = b.N
-		}
+		top := min(i+10, b.N)
 		if _, err := s.Publish(msgs[i:top]); err != nil {
 			b.Fatal(err)
 		}
@@ -397,7 +385,7 @@ func benchmarkGetKeyMulti(b *testing.B) {
 	b.ResetTimer()
 
 	g := new(errgroup.Group)
-	for k := 0; k < 10; k++ {
+	for range 10 {
 		g.Go(func() error {
 			for i := 0; i < b.N; i++ {
 				if _, err := s.GetByKey(msgs[i].Key); err != nil {
@@ -428,10 +416,7 @@ func benchmarkBaseMulti(b *testing.B) {
 
 	g.Go(func() error {
 		for i := 0; i < b.N; i += 10 {
-			top := i + 10
-			if top > b.N {
-				top = b.N
-			}
+			top := min(i+10, b.N)
 			if _, err := s.Publish(msgs[i:top]); err != nil {
 				return err
 			}

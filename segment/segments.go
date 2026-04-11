@@ -18,8 +18,8 @@ func Find(dir string) ([]Segment, error) {
 
 	var segments []Segment
 	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".log") {
-			offsetStr := strings.TrimSuffix(f.Name(), ".log")
+		if before, ok := strings.CutSuffix(f.Name(), ".log"); ok {
+			offsetStr := before
 
 			offset, err := strconv.ParseInt(offsetStr, 10, 64)
 			if err != nil {
