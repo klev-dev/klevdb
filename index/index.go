@@ -39,9 +39,8 @@ func (o Params) NewItem(m message.Message, position int64, prevts int64) Item {
 	it := Item{Offset: m.Offset, Position: position}
 
 	if o.Times {
-		it.Timestamp = max(
-			// guarantee timestamp monotonic increase
-			m.Time.UnixMicro(), prevts)
+		// guarantee timestamp monotonic increase
+		it.Timestamp = max(m.Time.UnixMicro(), prevts)
 	}
 
 	if o.Keys {
