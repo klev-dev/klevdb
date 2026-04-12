@@ -52,7 +52,7 @@ func (s Segment) Stat(params index.Params) (Stats, error) {
 
 	return Stats{
 		Segments: 1,
-		Messages: int(indexStat.Size() / params.Size()),
+		Messages: int(max(0, indexStat.Size()-index.HeaderSize) / params.Size()),
 		Size:     logStat.Size() + indexStat.Size(),
 	}, nil
 }
@@ -185,21 +185,8 @@ func (s Segment) Recover(params index.Params) error {
 	return nil
 }
 
-func (s Segment) NeedsReindex() (bool, error) {
-	switch info, err := os.Stat(s.Index); {
-	case os.IsNotExist(err):
-		return true, nil
-	case err != nil:
-		return false, fmt.Errorf("needs reindex stat: %w", err)
-	case info.Size() == 0:
-		return true, nil
-	default:
-		return false, nil
-	}
-}
-
 func (s Segment) ReindexAndReadIndex(params index.Params) ([]index.Item, error) {
-	switch reindex, err := s.NeedsReindex(); {
+	switch reindex, err := index.NeedsReindex(s.Index, params); {
 	case err != nil:
 		return nil, err
 	case reindex:

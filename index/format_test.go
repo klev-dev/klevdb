@@ -1,6 +1,7 @@
 package index
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -39,4 +40,150 @@ func TestWriteRead(t *testing.T) {
 		require.Equal(t, int64(i), item.Timestamp)
 		require.Equal(t, uint64(i), item.KeyHash)
 	}
+}
+
+func TestRead_HeaderOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, Write(path, iopts, nil))
+
+	items, err := Read(path, iopts)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+func TestRead_ParamsMismatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, Write(path, Params{Times: true, Keys: false}, nil))
+
+	_, err := Read(path, Params{Times: true, Keys: true})
+	require.ErrorIs(t, err, ErrParamsMismatch)
+}
+
+func TestRead_Corrupted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, os.WriteFile(path, []byte("notaheader1234567890"), 0600))
+
+	_, err := Read(path, iopts)
+	require.ErrorIs(t, err, ErrCorrupted)
+}
+
+func TestRead_PartialHeader(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, os.WriteFile(path, preamble[:4], 0600))
+
+	_, err := Read(path, iopts)
+	require.ErrorIs(t, err, ErrCorrupted)
+}
+
+func TestWrite_OverwritesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write with mismatched params (old format simulation)
+	path := filepath.Join(dir, "index")
+	require.NoError(t, Write(path, Params{Times: false, Keys: false}, []Item{{Offset: 99}}))
+
+	// Overwrite with new params — should succeed (O_TRUNC, not O_APPEND)
+	require.NoError(t, Write(path, iopts, []Item{{Offset: 1, Position: 2, Timestamp: 3, KeyHash: 4}}))
+
+	items, err := Read(path, iopts)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, int64(1), items[0].Offset)
+}
+
+func TestOpenWriter_ExistingValid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+
+	// Create index with one item
+	require.NoError(t, Write(path, iopts, []Item{{Offset: 0}}))
+
+	// Reopen and append another item
+	w, err := OpenWriter(path, iopts)
+	require.NoError(t, err)
+	require.NoError(t, w.Write(Item{Offset: 1, Position: 1, Timestamp: 1, KeyHash: 1}))
+	require.NoError(t, w.SyncAndClose())
+
+	items, err := Read(path, iopts)
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+}
+
+func TestOpenWriter_BadHeader(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, os.WriteFile(path, make([]byte, HeaderSize), 0600))
+
+	_, err := OpenWriter(path, iopts)
+	require.ErrorIs(t, err, ErrCorrupted)
+}
+
+func TestOpenWriter_ParamsMismatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, Write(path, Params{Times: false, Keys: false}, nil))
+
+	_, err := OpenWriter(path, iopts)
+	require.ErrorIs(t, err, ErrParamsMismatch)
+}
+
+func TestNeedsReindex_Missing(t *testing.T) {
+	dir := t.TempDir()
+	needs, err := NeedsReindex(filepath.Join(dir, "index"), iopts)
+	require.NoError(t, err)
+	require.True(t, needs)
+}
+
+func TestNeedsReindex_Empty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, os.WriteFile(path, nil, 0600))
+
+	needs, err := NeedsReindex(path, iopts)
+	require.NoError(t, err)
+	require.True(t, needs)
+}
+
+func TestNeedsReindex_ValidHeader(t *testing.T) {
+	dir := t.TempDir()
+	path, err := createIndex(dir, 10)
+	require.NoError(t, err)
+
+	needs, err := NeedsReindex(path, iopts)
+	require.NoError(t, err)
+	require.False(t, needs)
+}
+
+func TestNeedsReindex_BadPreamble(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, os.WriteFile(path, make([]byte, HeaderSize), 0600))
+
+	needs, err := NeedsReindex(path, iopts)
+	require.NoError(t, err)
+	require.True(t, needs)
+}
+
+func TestNeedsReindex_ParamsMismatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, Write(path, Params{Times: false, Keys: false}, nil))
+
+	needs, err := NeedsReindex(path, iopts)
+	require.NoError(t, err)
+	require.True(t, needs)
+}
+
+func TestNeedsReindex_PartialHeader(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	require.NoError(t, os.WriteFile(path, preamble[:4], 0600)) // 4 bytes, less than headerSize
+
+	needs, err := NeedsReindex(path, iopts)
+	require.NoError(t, err)
+	require.True(t, needs)
 }

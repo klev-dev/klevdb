@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
 )
@@ -51,7 +52,7 @@ func TestBasic(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, stat.Segments)
 		require.Equal(t, 0, stat.Messages)
-		require.Equal(t, int64(0), stat.Size)
+		require.Equal(t, int64(index.HeaderSize), stat.Size)
 	})
 
 	var coff int64
@@ -110,7 +111,7 @@ func TestBasic(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, stat.Segments)
 		require.Equal(t, 3, stat.Messages)
-		require.Equal(t, 3*l.Size(msgs[0]), stat.Size)
+		require.Equal(t, 3*l.Size(msgs[0])+int64(index.HeaderSize), stat.Size)
 	})
 
 	t.Run("Relative", func(t *testing.T) {
@@ -160,7 +161,7 @@ func TestBasic(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, stat.Segments)
 		require.Equal(t, 6, stat.Messages)
-		require.Equal(t, 6*l.Size(msgs[0]), stat.Size)
+		require.Equal(t, 6*l.Size(msgs[0])+2*int64(index.HeaderSize), stat.Size)
 	})
 
 	t.Run("RolloverRelative", func(t *testing.T) {
@@ -762,7 +763,7 @@ func testReadonlySegment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, stat.Segments)
 	require.Equal(t, 4, stat.Messages)
-	require.Equal(t, 4*l.Size(msgs[0]), stat.Size)
+	require.Equal(t, 4*l.Size(msgs[0])+int64(index.HeaderSize), stat.Size)
 
 	bdir := t.TempDir()
 	err = l.Backup(bdir)
@@ -870,7 +871,7 @@ func testReadonlySegments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, stat.Segments)
 	require.Equal(t, 4, stat.Messages)
-	require.Equal(t, 4*l.Size(msgs[0]), stat.Size)
+	require.Equal(t, 4*l.Size(msgs[0])+2*int64(index.HeaderSize), stat.Size)
 
 	bdir := t.TempDir()
 	err = l.Backup(bdir)
@@ -914,7 +915,7 @@ func testStatSegment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, stats.Segments)
 	require.Equal(t, len(msgs), stats.Messages)
-	require.Equal(t, sz, stats.Size)
+	require.Equal(t, sz+int64(index.HeaderSize), stats.Size)
 }
 
 func testStatSegments(t *testing.T) {
@@ -939,7 +940,7 @@ func testStatSegments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, stats.Segments)
 	require.Equal(t, len(msgs), stats.Messages)
-	require.Equal(t, sz, stats.Size)
+	require.Equal(t, sz+2*int64(index.HeaderSize), stats.Size)
 }
 
 func TestBackup(t *testing.T) {
@@ -1099,14 +1100,7 @@ func TestCorruptReopen(t *testing.T) {
 	lastSegment := segments[len(segments)-1]
 	require.NoError(t, os.WriteFile(lastSegment.Index, []byte("random data characters"), 0700))
 
-	l, err = Open(dir, logOpts)
-	require.Error(t, err)
-	require.Nil(t, l)
-
-	for _, seg := range segments {
-		require.NoError(t, os.Remove(seg.Index))
-	}
-
+	// Corrupt index is auto-recovered by reindexing from the log on open.
 	l, err = Open(dir, logOpts)
 	require.NoError(t, err)
 

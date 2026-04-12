@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/klev-dev/klevdb"
+	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func TestBySize(t *testing.T) {
 
 	stat, err := l.Stat()
 	require.NoError(t, err)
-	require.Equal(t, l.Size(msgs[0])*20, stat.Size)
+	require.Equal(t, l.Size(msgs[0])*20+int64(index.HeaderSize), stat.Size)
 
 	msg, err := l.Get(klevdb.OffsetOldest)
 	require.NoError(t, err)
@@ -35,7 +36,7 @@ func TestBySize(t *testing.T) {
 
 		stat, err = l.Stat()
 		require.NoError(t, err)
-		require.Equal(t, l.Size(msgs[0])*20, stat.Size)
+		require.Equal(t, l.Size(msgs[0])*20+int64(index.HeaderSize), stat.Size)
 
 		msg, err = l.Get(klevdb.OffsetOldest)
 		require.NoError(t, err)
@@ -51,7 +52,7 @@ func TestBySize(t *testing.T) {
 
 		stat, err = l.Stat()
 		require.NoError(t, err)
-		require.Equal(t, l.Size(msgs[0])*10, stat.Size)
+		require.Equal(t, l.Size(msgs[0])*10+int64(index.HeaderSize), stat.Size)
 
 		msg, err = l.Get(klevdb.OffsetOldest)
 		require.NoError(t, err)
