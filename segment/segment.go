@@ -50,10 +50,15 @@ func (s Segment) Stat(params index.Params) (Stats, error) {
 		return Stats{}, fmt.Errorf("stat index: %w", err)
 	}
 
+	indexSize := indexStat.Size()
+	var headerSize int64
+	if indexSize%params.Size() != 0 {
+		headerSize = index.HeaderSize
+	}
 	return Stats{
 		Segments: 1,
-		Messages: int(max(0, indexStat.Size()-index.HeaderSize) / params.Size()),
-		Size:     logStat.Size() + indexStat.Size(),
+		Messages: int(max(0, indexSize-headerSize) / params.Size()),
+		Size:     logStat.Size() + indexSize,
 	}, nil
 }
 
@@ -84,7 +89,7 @@ func (s Segment) Check(params index.Params) error {
 		indexTime = item.Timestamp
 	}
 
-	switch items, err := index.Read(s.Index, params); {
+	switch items, err := index.Read(s.Index, s.Offset, params); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -158,7 +163,7 @@ func (s Segment) Recover(params index.Params) error {
 	}
 
 	var corruptedIndex = false
-	switch items, err := index.Read(s.Index, params); {
+	switch items, err := index.Read(s.Index, s.Offset, params); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case errors.Is(err, index.ErrCorrupted):
@@ -192,7 +197,7 @@ func (s Segment) ReindexAndReadIndex(params index.Params) ([]index.Item, error) 
 	case reindex:
 		return s.Reindex(params)
 	default:
-		return index.Read(s.Index, params)
+		return index.Read(s.Index, s.Offset, params)
 	}
 }
 

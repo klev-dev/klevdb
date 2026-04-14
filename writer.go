@@ -40,7 +40,7 @@ func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writ
 		ix = newWriterIndex(nil, params.Keys, seg.Offset, nextTime)
 	}
 
-	items, err := index.OpenWriter(seg.Index, params)
+	items, err := index.OpenWriter(seg.Index, seg.Offset, params)
 	if err != nil {
 		return nil, err
 	}

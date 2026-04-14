@@ -1,6 +1,7 @@
 package index
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,7 +31,7 @@ func TestWriteRead(t *testing.T) {
 	filename, err := createIndex(dir, indexSz)
 	require.NoError(t, err)
 
-	items, err := Read(filename, iopts)
+	items, err := Read(filename, 0, iopts)
 	require.NoError(t, err)
 	require.Len(t, items, indexSz)
 
@@ -47,7 +48,7 @@ func TestRead_HeaderOnly(t *testing.T) {
 	path := filepath.Join(dir, "index")
 	require.NoError(t, Write(path, iopts, nil))
 
-	items, err := Read(path, iopts)
+	items, err := Read(path, 0, iopts)
 	require.NoError(t, err)
 	require.Empty(t, items)
 }
@@ -57,7 +58,7 @@ func TestRead_ParamsMismatch(t *testing.T) {
 	path := filepath.Join(dir, "index")
 	require.NoError(t, Write(path, Params{Times: true, Keys: false}, nil))
 
-	_, err := Read(path, Params{Times: true, Keys: true})
+	_, err := Read(path, 0, Params{Times: true, Keys: true})
 	require.ErrorIs(t, err, ErrParamsMismatch)
 }
 
@@ -66,16 +67,16 @@ func TestRead_Corrupted(t *testing.T) {
 	path := filepath.Join(dir, "index")
 	require.NoError(t, os.WriteFile(path, []byte("notaheader1234567890"), 0600))
 
-	_, err := Read(path, iopts)
+	_, err := Read(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
 }
 
 func TestRead_PartialHeader(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "index")
-	require.NoError(t, os.WriteFile(path, preamble[:4], 0600))
+	require.NoError(t, os.WriteFile(path, magic[:4], 0600))
 
-	_, err := Read(path, iopts)
+	_, err := Read(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
 }
 
@@ -89,7 +90,7 @@ func TestWrite_OverwritesExistingFile(t *testing.T) {
 	// Overwrite with new params — should succeed (O_TRUNC, not O_APPEND)
 	require.NoError(t, Write(path, iopts, []Item{{Offset: 1, Position: 2, Timestamp: 3, KeyHash: 4}}))
 
-	items, err := Read(path, iopts)
+	items, err := Read(path, 0, iopts)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Equal(t, int64(1), items[0].Offset)
@@ -103,12 +104,12 @@ func TestOpenWriter_ExistingValid(t *testing.T) {
 	require.NoError(t, Write(path, iopts, []Item{{Offset: 0}}))
 
 	// Reopen and append another item
-	w, err := OpenWriter(path, iopts)
+	w, err := OpenWriter(path, 0, iopts)
 	require.NoError(t, err)
 	require.NoError(t, w.Write(Item{Offset: 1, Position: 1, Timestamp: 1, KeyHash: 1}))
 	require.NoError(t, w.SyncAndClose())
 
-	items, err := Read(path, iopts)
+	items, err := Read(path, 0, iopts)
 	require.NoError(t, err)
 	require.Len(t, items, 2)
 }
@@ -118,7 +119,7 @@ func TestOpenWriter_BadHeader(t *testing.T) {
 	path := filepath.Join(dir, "index")
 	require.NoError(t, os.WriteFile(path, make([]byte, HeaderSize), 0600))
 
-	_, err := OpenWriter(path, iopts)
+	_, err := OpenWriter(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
 }
 
@@ -127,7 +128,7 @@ func TestOpenWriter_ParamsMismatch(t *testing.T) {
 	path := filepath.Join(dir, "index")
 	require.NoError(t, Write(path, Params{Times: false, Keys: false}, nil))
 
-	_, err := OpenWriter(path, iopts)
+	_, err := OpenWriter(path, 0, iopts)
 	require.ErrorIs(t, err, ErrParamsMismatch)
 }
 
@@ -181,7 +182,56 @@ func TestNeedsReindex_ParamsMismatch(t *testing.T) {
 func TestNeedsReindex_PartialHeader(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "index")
-	require.NoError(t, os.WriteFile(path, preamble[:4], 0600)) // 4 bytes, less than headerSize
+	require.NoError(t, os.WriteFile(path, magic[:4], 0600)) // 4 bytes, less than headerSize
+
+	needs, err := NeedsReindex(path, iopts)
+	require.NoError(t, err)
+	require.True(t, needs)
+}
+
+// writeV0Index writes a header-less (pre-v1) index file directly using raw binary encoding.
+func writeV0Index(path string, opts Params, items []Item) error {
+	itemSize := int(opts.Size())
+	keyOffset := opts.keyOffset()
+	data := make([]byte, len(items)*itemSize)
+	for i, it := range items {
+		pos := i * itemSize
+		binary.BigEndian.PutUint64(data[pos:], uint64(it.Offset))
+		binary.BigEndian.PutUint64(data[pos+8:], uint64(it.Position))
+		if opts.Times {
+			binary.BigEndian.PutUint64(data[pos+16:], uint64(it.Timestamp))
+		}
+		if opts.Keys {
+			binary.BigEndian.PutUint64(data[pos+keyOffset:], it.KeyHash)
+		}
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
+func TestRead_V0Compat(t *testing.T) {
+	const segOffset = int64(100)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+
+	want := []Item{
+		{Offset: segOffset, Position: 0, Timestamp: 1, KeyHash: 11},
+		{Offset: segOffset + 1, Position: 100, Timestamp: 2, KeyHash: 22},
+	}
+	require.NoError(t, writeV0Index(path, iopts, want))
+
+	items, err := Read(path, segOffset, iopts)
+	require.NoError(t, err)
+	require.Equal(t, want, items)
+}
+
+func TestNeedsReindex_V0(t *testing.T) {
+	const segOffset = int64(100)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+
+	require.NoError(t, writeV0Index(path, iopts, []Item{
+		{Offset: segOffset, Position: 0, Timestamp: 1, KeyHash: 11},
+	}))
 
 	needs, err := NeedsReindex(path, iopts)
 	require.NoError(t, err)

@@ -214,7 +214,7 @@ func TestBackup(t *testing.T) {
 func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []message.Message) {
 	lw, err := message.OpenWriter(seg.Log)
 	require.NoError(t, err)
-	iw, err := index.OpenWriter(seg.Index, params)
+	iw, err := index.OpenWriter(seg.Index, seg.Offset, params)
 	require.NoError(t, err)
 
 	var indexTime int64
