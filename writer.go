@@ -16,6 +16,7 @@ import (
 type writer struct {
 	segment segment.Segment
 	params  index.Params
+	version Version
 
 	messages *message.Writer
 	items    *index.Writer
@@ -23,19 +24,15 @@ type writer struct {
 	reader   *reader
 }
 
-func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writer, error) {
-	messages, err := message.OpenWriter(seg.Data, seg.DataFormat)
+func openWriter(seg segment.Segment, params index.Params, version Version, nextTime int64) (*writer, error) {
+	messages, err := message.OpenWriter(seg.Log, seg.Offset, version.messages)
 	if err != nil {
 		return nil, err
 	}
 
 	var ix *writerIndex
-	headerSize := int64(0)
-	if seg.DataFormat == message.FormatSegment {
-		headerSize = message.HeaderSize
-	}
-	if messages.Size() > headerSize {
-		indexItems, err := seg.ReindexAndReadIndex(params)
+	if messages.Size() > message.HeaderSize {
+		indexItems, err := seg.ReindexAndReadIndex(params, version.index)
 		if err != nil {
 			return nil, err
 		}
@@ -44,12 +41,12 @@ func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writ
 		ix = newWriterIndex(nil, params.Keys, seg.Offset, nextTime)
 	}
 
-	items, err := index.OpenWriter(seg.Index, params, seg.IndexFormat)
+	items, err := index.OpenWriter(seg.Index, seg.Offset, version.index, params)
 	if err != nil {
 		return nil, err
 	}
 
-	reader, err := openReaderAppend(seg, params, ix)
+	reader, err := openReaderAppend(seg, params, version, ix)
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +54,7 @@ func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writ
 	return &writer{
 		segment: seg,
 		params:  params,
+		version: version,
 
 		messages: messages,
 		items:    items,
@@ -102,7 +100,7 @@ func (w *writer) Publish(msgs []message.Message) (int64, error) {
 }
 
 func (w *writer) ReopenReader() (*reader, int64, int64) {
-	rdr := reopenReader(w.segment, w.params, w.index.reader())
+	rdr := reopenReader(w.segment, w.params, w.version, w.index.reader())
 	nextOffset, nextTime := w.index.getNext()
 	return rdr, nextOffset, nextTime
 }
@@ -132,8 +130,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		}
 
 		nextOffset, nextTime := w.index.getNext()
-		nseg := segment.New(w.segment.Dir, nextOffset, message.FormatSegment)
-		nwrt, err := openWriter(nseg, w.params, nextTime)
+		nwrt, err := openWriter(w.segment.NewAt(nextOffset), w.params, w.version, nextTime)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -147,30 +144,23 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 
 	nseg := rs.GetNewSegment()
 	if nseg != w.segment {
-		// the new segment occupies a different path (offset changed or format upgraded)
+		// the starting offset of the new segment is different
 		if err := rs.Rename(nseg); err != nil {
 			return nil, nil, err
 		}
 
-		if w.segment.Index == nseg.Index {
-			// only delete the data part, since the index was already renamed by rs.Rename(nseg)
-			if err := w.segment.RemoveData(); err != nil {
-				return nil, nil, err
-			}
-		} else {
-			if err := w.segment.Remove(); err != nil {
-				return nil, nil, err
-			}
+		if err := w.segment.Remove(); err != nil {
+			return nil, nil, err
 		}
 
 		// first move the replacement
 		nextOffset, nextTime := w.index.getNext()
 		if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
-			rdr := openReader(nseg, w.params, false)
-			wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset, w.segment.DataFormat), w.params, nextTime)
+			rdr := openReader(nseg, w.params, w.version, false)
+			wrt, err := openWriter(w.segment.NewAt(nextOffset), w.params, w.version, nextTime)
 			return wrt, rdr, err
 		} else {
-			wrt, err := openWriter(nseg, w.params, nextTime)
+			wrt, err := openWriter(nseg, w.params, w.version, nextTime)
 			return wrt, nil, err
 		}
 	}
@@ -181,11 +171,11 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 
 	nextOffset, nextTime := w.index.getNext()
 	if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
-		rdr := openReader(w.segment, w.params, false)
-		wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset, w.segment.DataFormat), w.params, nextTime)
+		rdr := openReader(w.segment, w.params, w.version, false)
+		wrt, err := openWriter(w.segment.NewAt(nextOffset), w.params, w.version, nextTime)
 		return wrt, rdr, err
 	} else {
-		wrt, err := openWriter(w.segment, w.params, nextTime)
+		wrt, err := openWriter(w.segment, w.params, w.version, nextTime)
 		return wrt, nil, err
 	}
 }

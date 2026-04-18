@@ -26,6 +26,9 @@ func Open(dir string, opts Options) (result Log, err error) {
 	if opts.Rollover <= 0 {
 		opts.Rollover = 1024 * 1024
 	}
+	if opts.Version.NewSegmentsVersion == VLast {
+		opts.Version.NewSegmentsVersion = V2
+	}
 
 	if opts.CreateDirs {
 		if err := os.MkdirAll(dir, 0700); err != nil {
@@ -66,7 +69,7 @@ func Open(dir string, opts Options) (result Log, err error) {
 		lock:   lock,
 	}
 
-	segments, err := segment.Find(dir)
+	segments, err := segment.Find(dir, opts.AutoSync)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +77,10 @@ func Open(dir string, opts Options) (result Log, err error) {
 	if len(segments) == 0 {
 		if opts.Readonly {
 			ix := newReaderIndex(nil, params.Keys, 0, true)
-			rdr := reopenReader(segment.New(dir, 0, message.FormatSegment), params, ix)
+			rdr := reopenReader(segment.New(dir, 0, opts.AutoSync), params, opts.Version.NewSegmentsVersion, ix)
 			l.readers = []*reader{rdr}
 		} else {
-			w, err := openWriter(segment.New(dir, 0, message.FormatSegment), params, 0)
+			w, err := openWriter(segment.New(dir, 0, opts.AutoSync), params, opts.Version.NewSegmentsVersion, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -92,23 +95,25 @@ func Open(dir string, opts Options) (result Log, err error) {
 			}
 		}
 
-		if !opts.Readonly {
-			if err := segment.CleanupOrphanLogs(dir); err != nil {
-				return nil, err
+		if opts.Version.EagerVersionMigrate {
+			for _, seg := range segments {
+				if _, err := seg.Migrate(opts.Version.NewSegmentsVersion.messages); err != nil {
+					return nil, fmt.Errorf("open migrate: %w", err)
+				}
 			}
 		}
 
 		head := segments[len(segments)-1]
 		for _, seg := range segments[:len(segments)-1] {
-			rdr := openReader(seg, params, false)
+			rdr := openReader(seg, params, opts.Version.NewSegmentsVersion, false)
 			l.readers = append(l.readers, rdr)
 		}
 
 		if opts.Readonly {
-			rdr := openReader(head, params, true)
+			rdr := openReader(head, params, opts.Version.NewSegmentsVersion, true)
 			l.readers = append(l.readers, rdr)
 		} else {
-			wrt, err := openWriter(head, params, 0)
+			wrt, err := openWriter(head, params, opts.Version.NewSegmentsVersion, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -150,7 +155,7 @@ func (l *log) Publish(msgs []message.Message) (int64, error) {
 		}
 
 		oldReader, nextOffset, nextTime := l.writer.ReopenReader()
-		newWriter, err := openWriter(segment.New(l.dir, nextOffset, message.FormatSegment), l.params, nextTime)
+		newWriter, err := openWriter(segment.New(l.dir, nextOffset, l.opts.AutoSync), l.params, l.opts.Version.NewSegmentsVersion, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}
@@ -371,7 +376,7 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	}
 	l.writerMu.Unlock()
 
-	rs, err := rdr.segment.Rewrite(offsets, l.params)
+	rs, err := rdr.segment.Rewrite(offsets, l.params, l.opts.Version.NewSegmentsVersion.messages, l.opts.Version.NewSegmentsVersion.index)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -454,9 +459,8 @@ func (l *log) findDeleteReader(offsets map[int64]struct{}) (*reader, error) {
 	return rdr, err
 }
 
-// Size returns the on-disk cost of writing m as a new message (always FormatSegment overhead).
 func (l *log) Size(m message.Message) int64 {
-	return message.Size(m, message.FormatSegment) + l.params.Size()
+	return message.Size(m, l.opts.Version.NewSegmentsVersion.messages) + l.params.Size()
 }
 
 func (l *log) Stat() (segment.Stats, error) {

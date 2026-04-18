@@ -1,6 +1,8 @@
 package segment
 
 import (
+	"encoding/binary"
+	"hash/crc32"
 	"hash/fnv"
 	"os"
 	"testing"
@@ -11,6 +13,8 @@ import (
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 )
+
+var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
 func clearLastByte(fn string) error {
 	f, err := os.OpenFile(fn, os.O_RDWR, 0600)
@@ -31,6 +35,32 @@ func clearLastByte(fn string) error {
 	return f.Close()
 }
 
+// makeV0Log writes messages in raw V0 format (no file header) to path.
+// V0 per-message layout: [offset:8][unixmicro:8][keysize:4][valuesize:4][crc:4][key][value]
+func makeV0Log(t *testing.T, path string, msgs []message.Message) {
+	t.Helper()
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	defer f.Close()
+
+	for _, m := range msgs {
+		body := append(m.Key, m.Value...)
+		crc := crc32.Checksum(body, crc32cTable)
+
+		var hdr [28]byte
+		binary.BigEndian.PutUint64(hdr[0:], uint64(m.Offset))
+		binary.BigEndian.PutUint64(hdr[8:], uint64(m.Time.UnixMicro()))
+		binary.BigEndian.PutUint32(hdr[16:], uint32(len(m.Key)))
+		binary.BigEndian.PutUint32(hdr[20:], uint32(len(m.Value)))
+		binary.BigEndian.PutUint32(hdr[24:], crc)
+
+		_, err = f.Write(hdr[:])
+		require.NoError(t, err)
+		_, err = f.Write(body)
+		require.NoError(t, err)
+	}
+}
+
 func TestRecover(t *testing.T) {
 	params := index.Params{Times: true, Keys: true}
 	msgs := []message.Message{
@@ -48,6 +78,9 @@ func TestRecover(t *testing.T) {
 		},
 	}
 
+	// V1 sizes (with segment header): truncation positions are header-relative.
+	msg0Size := message.Size(msgs[0], message.V2)
+
 	var tests = []struct {
 		name    string
 		in      []message.Message
@@ -64,7 +97,7 @@ func TestRecover(t *testing.T) {
 			"MessageMissing",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Data, message.Size(msgs[0], message.FormatLog))
+				return os.Truncate(s.Log, message.HeaderSize+msg0Size)
 			},
 			msgs[0:1],
 		},
@@ -72,7 +105,7 @@ func TestRecover(t *testing.T) {
 			"MessageShortHeader",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Data, message.Size(msgs[0], message.FormatLog)+4)
+				return os.Truncate(s.Log, message.HeaderSize+msg0Size+4)
 			},
 			msgs[0:1],
 		},
@@ -80,7 +113,7 @@ func TestRecover(t *testing.T) {
 			"MessageShortData",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Data, message.Size(msgs[0], message.FormatLog)+params.Size()+4)
+				return os.Truncate(s.Log, message.HeaderSize+msg0Size+params.Size()+4)
 			},
 			msgs[0:1],
 		},
@@ -88,7 +121,7 @@ func TestRecover(t *testing.T) {
 			"MessageCRC",
 			msgs,
 			func(s Segment) error {
-				return clearLastByte(s.Data)
+				return clearLastByte(s.Log)
 			},
 			msgs[0:1],
 		},
@@ -104,7 +137,8 @@ func TestRecover(t *testing.T) {
 			"IndexItemMissing",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Index, params.Size())
+				// Truncate to header + fewer-than-one full item (triggers errIndexSize).
+				return os.Truncate(s.Index, index.HeaderSize+params.Size()-1)
 			},
 			msgs,
 		},
@@ -112,7 +146,7 @@ func TestRecover(t *testing.T) {
 			"IndexItemPartial",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Index, params.Size()+4)
+				return os.Truncate(s.Index, index.HeaderSize+params.Size()+4)
 			},
 			msgs,
 		},
@@ -128,7 +162,7 @@ func TestRecover(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New(t.TempDir(), 0, message.FormatLog)
+			seg := New(t.TempDir(), 0, false)
 			writeMessages(t, seg, params, test.in)
 
 			require.NoError(t, test.corrupt(seg))
@@ -199,13 +233,13 @@ func TestBackup(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New(t.TempDir(), 0, message.FormatLog)
+			seg := New(t.TempDir(), 0, false)
 			writeMessages(t, seg, params, test.in)
 
 			ndir := t.TempDir()
 			require.NoError(t, test.backup(t, seg, ndir))
 
-			nseg := New(ndir, 0, message.FormatLog)
+			nseg := New(ndir, 0, false)
 			assertMessages(t, nseg, params, test.out)
 		})
 	}
@@ -214,10 +248,10 @@ func TestBackup(t *testing.T) {
 func TestNeedsReindexHeaderOnly(t *testing.T) {
 	params := index.Params{Times: true, Keys: true}
 	dir := t.TempDir()
-	seg := New(dir, 0, message.FormatSegment)
+	seg := New(dir, 0, false)
 
 	// Write just the header to the index (simulates crash after header write, before any items)
-	iw, err := index.OpenWriter(seg.Index, params, index.FormatSegment)
+	iw, err := index.OpenWriter(seg.Index, seg.Offset, index.V2, params)
 	require.NoError(t, err)
 	require.NoError(t, iw.Close())
 
@@ -228,7 +262,7 @@ func TestNeedsReindexHeaderOnly(t *testing.T) {
 
 func TestNeedsReindexPartialHeader(t *testing.T) {
 	dir := t.TempDir()
-	seg := New(dir, 0, message.FormatSegment)
+	seg := New(dir, 0, false)
 
 	// Write a single byte to the index (simulates crash mid-header-write)
 	f, err := os.Create(seg.Index)
@@ -261,52 +295,61 @@ func TestMigrate(t *testing.T) {
 
 	t.Run("Basic", func(t *testing.T) {
 		dir := t.TempDir()
-		oldSeg := New(dir, 0, message.FormatLog)
-		writeMessages(t, oldSeg, params, msgs)
+		seg := New(dir, 0, false)
 
-		newSeg, err := oldSeg.Migrate()
+		// Write V0 content directly (no segment header).
+		makeV0Log(t, seg.Log, msgs)
+
+		newSeg, err := seg.Migrate(message.V2)
 		require.NoError(t, err)
-		require.Equal(t, message.FormatSegment, newSeg.DataFormat)
 
-		// old .log file should be gone
-		_, err = os.Stat(oldSeg.Data)
-		require.ErrorIs(t, err, os.ErrNotExist)
+		// After migration the file should be readable as V1.
+		r, err := message.OpenReader(newSeg.Log, newSeg.Offset)
+		require.NoError(t, err)
+		require.Equal(t, message.V2, r.Version())
+		require.NoError(t, r.Close())
 
 		assertMessages(t, newSeg, params, msgs)
 	})
 
 	t.Run("NoOp", func(t *testing.T) {
 		dir := t.TempDir()
-		seg := New(dir, 0, message.FormatSegment)
+		seg := New(dir, 0, false)
 		writeMessages(t, seg, params, msgs)
 
-		result, err := seg.Migrate()
+		result, err := seg.Migrate(message.V2)
 		require.NoError(t, err)
 		require.Equal(t, seg, result)
 	})
 
 	t.Run("StaleTemp", func(t *testing.T) {
 		dir := t.TempDir()
-		oldSeg := New(dir, 0, message.FormatLog)
-		writeMessages(t, oldSeg, params, msgs)
+		seg := New(dir, 0, false)
 
-		// plant a stale .migrate temp file
-		newSeg := New(dir, 0, message.FormatSegment)
-		stale, err := os.Create(newSeg.Data + ".migrate")
+		// Write V0 content directly.
+		makeV0Log(t, seg.Log, msgs)
+
+		// Plant a stale .migrate temp file.
+		stale, err := os.Create(seg.Log + ".migrate")
 		require.NoError(t, err)
 		require.NoError(t, stale.Close())
 
-		result, err := oldSeg.Migrate()
+		result, err := seg.Migrate(message.V2)
 		require.NoError(t, err)
-		require.Equal(t, message.FormatSegment, result.DataFormat)
+
+		r, err := message.OpenReader(result.Log, result.Offset)
+		require.NoError(t, err)
+		require.Equal(t, message.V2, r.Version())
+		require.NoError(t, r.Close())
+
 		assertMessages(t, result, params, msgs)
 	})
 }
 
 func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []message.Message) {
-	lw, err := message.OpenWriter(seg.Data, seg.DataFormat)
+	lw, err := message.OpenWriter(seg.Log, seg.Offset, message.V2)
 	require.NoError(t, err)
-	iw, err := index.OpenWriter(seg.Index, params, seg.IndexFormat)
+	iw, err := index.OpenWriter(seg.Index, seg.Offset, index.V2, params)
 	require.NoError(t, err)
 
 	var indexTime int64
@@ -324,15 +367,15 @@ func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []messag
 }
 
 func assertMessages(t *testing.T, seg Segment, params index.Params, expMsgs []message.Message) {
-	index, err := seg.ReindexAndReadIndex(params)
+	idx, err := seg.ReindexAndReadIndex(params, index.V2)
 	require.NoError(t, err)
-	require.Len(t, index, len(expMsgs))
+	require.Len(t, idx, len(expMsgs))
 
-	lr, err := message.OpenReader(seg.Data, seg.DataFormat)
+	lr, err := message.OpenReader(seg.Log, seg.Offset)
 	require.NoError(t, err)
 
 	for i, expMsg := range expMsgs {
-		actIndex := index[i]
+		actIndex := idx[i]
 
 		require.Equal(t, expMsg.Offset, actIndex.Offset)
 		require.Equal(t, expMsg.Time.UnixMicro(), actIndex.Timestamp)

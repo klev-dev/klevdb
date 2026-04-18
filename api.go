@@ -54,6 +54,30 @@ type Options struct {
 	Rollover int64
 	// Check the head segment for integrity, before opening it for reading/writing.
 	Check bool
+	// Upgrade specifies how to upgrade the versions
+	Version VersionOptions
+}
+
+type Version struct {
+	messages message.Version
+	index    index.Version
+}
+
+var (
+	V1    = Version{message.V1, index.V1}
+	V2    = Version{message.V2, index.V2}
+	VLast = Version{}
+)
+
+type VersionOptions struct {
+	// NewSegmentsVersion indicates what version will new segments use
+	NewSegmentsVersion Version
+
+	// KeepRewriteVersion rewriting segments (delete) will keep the original segment version
+	KeepRewriteVersion bool
+
+	// EagerVersionMigrate when true, open will rewrite all segments with NewSegmentsVersion
+	EagerVersionMigrate bool
 }
 
 type Log interface {
@@ -166,8 +190,8 @@ func Recover(dir string, opts Options) error {
 	})
 }
 
-func Migrate(dir string, opts Options) error {
-	return segment.MigrateDir(dir, index.Params{
+func Migrate(dir string, opts Options, version message.Version) error {
+	return segment.MigrateDir(dir, version, index.Params{
 		Times: opts.TimeIndex,
 		Keys:  opts.KeyIndex,
 	})

@@ -12,7 +12,7 @@ var indexSz = 10000
 
 var iopts = Params{true, true}
 
-func createIndex(dir string, itemCount int) (string, error) {
+func createIndex(dir string, itemCount int, v Version) (string, error) {
 	var items = make([]Item, itemCount)
 	for i := range items {
 		items[i].Offset = int64(i)
@@ -21,23 +21,33 @@ func createIndex(dir string, itemCount int) (string, error) {
 		items[i].KeyHash = uint64(i)
 	}
 	filename := filepath.Join(dir, "index")
-	return filename, Write(filename, iopts, items, FormatLog)
+	return filename, Write(filename, 0, v, iopts, items)
 }
 
-func TestWriteReadWithHeader(t *testing.T) {
+func TestWriteReadV1(t *testing.T) {
 	dir := t.TempDir()
 
-	var items = make([]Item, indexSz)
-	for i := range items {
-		items[i].Offset = int64(i)
-		items[i].Position = int64(i)
-		items[i].Timestamp = int64(i)
-		items[i].KeyHash = uint64(i)
-	}
-	filename := filepath.Join(dir, "index.segment")
-	require.NoError(t, Write(filename, iopts, items, FormatSegment))
+	filename, err := createIndex(dir, indexSz, V1)
+	require.NoError(t, err)
 
-	got, err := Read(filename, iopts, FormatSegment)
+	items, err := Read(filename, 0, iopts)
+	require.NoError(t, err)
+	require.Len(t, items, indexSz)
+
+	for i, item := range items {
+		require.Equal(t, int64(i), item.Offset)
+		require.Equal(t, int64(i), item.Position)
+		require.Equal(t, int64(i), item.Timestamp)
+		require.Equal(t, uint64(i), item.KeyHash)
+	}
+}
+func TestWriteReadV2(t *testing.T) {
+	dir := t.TempDir()
+
+	filename, err := createIndex(dir, indexSz, V2)
+	require.NoError(t, err)
+
+	got, err := Read(filename, 0, iopts)
 	require.NoError(t, err)
 	require.Len(t, got, indexSz)
 
@@ -57,7 +67,7 @@ func TestInvalidHeader(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	_, err = Read(path, iopts, FormatSegment)
+	_, err = Read(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
 }
 
@@ -70,24 +80,6 @@ func TestPartialIndexHeader(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	_, err = Read(path, iopts, FormatSegment)
+	_, err = Read(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
-}
-
-func TestWriteRead(t *testing.T) {
-	dir := t.TempDir()
-
-	filename, err := createIndex(dir, indexSz)
-	require.NoError(t, err)
-
-	items, err := Read(filename, iopts, FormatLog)
-	require.NoError(t, err)
-	require.Len(t, items, indexSz)
-
-	for i, item := range items {
-		require.Equal(t, int64(i), item.Offset)
-		require.Equal(t, int64(i), item.Position)
-		require.Equal(t, int64(i), item.Timestamp)
-		require.Equal(t, uint64(i), item.KeyHash)
-	}
 }

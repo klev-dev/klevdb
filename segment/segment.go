@@ -16,31 +16,30 @@ type Segment struct {
 	Dir    string
 	Offset int64
 
-	Data  string
+	Log   string
 	Index string
 
-	DataFormat  message.DetectedFormat
-	IndexFormat index.DetectedFormat
+	AutoSync bool
 }
 
 func (s Segment) GetOffset() int64 {
 	return s.Offset
 }
 
-func New(dir string, offset int64, format message.DetectedFormat) Segment {
-	s := Segment{Dir: dir, Offset: offset}
-	if format == message.FormatSegment {
-		s.Data = filepath.Join(dir, fmt.Sprintf("%020d.segment", offset))
-		s.Index = filepath.Join(dir, fmt.Sprintf("%020d.index", offset))
-		s.DataFormat = message.FormatSegment
-		s.IndexFormat = index.FormatSegment
-	} else {
-		s.Data = filepath.Join(dir, fmt.Sprintf("%020d.log", offset))
-		s.Index = filepath.Join(dir, fmt.Sprintf("%020d.index", offset))
-		s.DataFormat = message.FormatLog
-		s.IndexFormat = index.FormatLog
+func New(dir string, offset int64, autoSync bool) Segment {
+	return Segment{
+		Dir:    dir,
+		Offset: offset,
+
+		Log:   filepath.Join(dir, fmt.Sprintf("%020d.log", offset)),
+		Index: filepath.Join(dir, fmt.Sprintf("%020d.index", offset)),
+
+		AutoSync: autoSync,
 	}
-	return s
+}
+
+func (s Segment) NewAt(offset int64) Segment {
+	return New(s.Dir, offset, s.AutoSync)
 }
 
 type Stats struct {
@@ -50,29 +49,20 @@ type Stats struct {
 }
 
 func (s Segment) Stat(params index.Params) (Stats, error) {
-	dataStat, err := os.Stat(s.Data)
+	dataStat, err := os.Stat(s.Log)
 	if err != nil {
 		return Stats{}, fmt.Errorf("stat log: %w", err)
 	}
 
-	indexStat, err := os.Stat(s.Index)
+	indexSize, indexMessages, err := index.Stat(s.Index, s.Offset, params)
 	if err != nil {
 		return Stats{}, fmt.Errorf("stat index: %w", err)
 	}
 
-	indexDataSize := indexStat.Size()
-	if s.IndexFormat == index.FormatSegment {
-		indexDataSize -= index.HeaderSize
-	}
-	if indexDataSize < 0 {
-		// index is smaller than its header — treat as empty (NeedsReindex handles repair)
-		indexDataSize = 0
-	}
-
 	return Stats{
 		Segments: 1,
-		Messages: int(indexDataSize / params.Size()),
-		Size:     dataStat.Size() + indexStat.Size(),
+		Messages: indexMessages,
+		Size:     dataStat.Size() + indexSize,
 	}, nil
 }
 
@@ -80,7 +70,7 @@ var errIndexSize = fmt.Errorf("%w: incorrect size", index.ErrCorrupted)
 var errIndexItem = fmt.Errorf("%w: incorrect item", index.ErrCorrupted)
 
 func (s Segment) Check(params index.Params) error {
-	log, err := message.OpenReader(s.Data, s.DataFormat)
+	log, err := message.OpenReader(s.Log, s.Offset)
 	if err != nil {
 		return err
 	}
@@ -104,7 +94,7 @@ func (s Segment) Check(params index.Params) error {
 		indexTime = item.Timestamp
 	}
 
-	switch items, err := index.Read(s.Index, params, s.IndexFormat); {
+	switch items, err := index.Read(s.Index, s.Offset, params); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -123,13 +113,13 @@ func (s Segment) Check(params index.Params) error {
 }
 
 func (s Segment) Recover(params index.Params) error {
-	log, err := message.OpenReader(s.Data, s.DataFormat)
+	log, err := message.OpenReader(s.Log, s.Offset)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = log.Close() }()
 
-	restore, err := message.OpenWriter(s.Data+".recover", s.DataFormat)
+	restore, err := message.OpenWriter(s.Log+".recover", s.Offset, log.Version())
 	if err != nil {
 		return err
 	}
@@ -179,7 +169,7 @@ func (s Segment) Recover(params index.Params) error {
 	}
 
 	var corruptedIndex = false
-	switch items, err := index.Read(s.Index, params, s.IndexFormat); {
+	switch items, err := index.Read(s.Index, s.Offset, params); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case errors.Is(err, index.ErrCorrupted):
@@ -216,9 +206,7 @@ func (s Segment) NeedsReindex() (bool, error) {
 		return true, nil
 	case err != nil:
 		return false, fmt.Errorf("needs reindex stat: %w", err)
-	case info.Size() == 0:
-		return true, nil
-	case s.IndexFormat == index.FormatSegment && info.Size() <= index.HeaderSize:
+	case info.Size() <= index.HeaderSize:
 		// header-only or partial header: no index entries present
 		return true, nil
 	default:
@@ -226,28 +214,28 @@ func (s Segment) NeedsReindex() (bool, error) {
 	}
 }
 
-func (s Segment) ReindexAndReadIndex(params index.Params) ([]index.Item, error) {
+func (s Segment) ReindexAndReadIndex(params index.Params, version index.Version) ([]index.Item, error) {
 	switch reindex, err := s.NeedsReindex(); {
 	case err != nil:
 		return nil, err
 	case reindex:
-		return s.Reindex(params)
+		return s.Reindex(params, version)
 	default:
-		return index.Read(s.Index, params, s.IndexFormat)
+		return index.Read(s.Index, s.Offset, params)
 	}
 }
 
-func (s Segment) Reindex(params index.Params) ([]index.Item, error) {
-	log, err := message.OpenReader(s.Data, s.DataFormat)
+func (s Segment) Reindex(params index.Params, version index.Version) ([]index.Item, error) {
+	log, err := message.OpenReader(s.Log, s.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = log.Close() }()
 
-	return s.ReindexReader(params, log)
+	return s.ReindexReader(params, log, version)
 }
 
-func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]index.Item, error) {
+func (s Segment) ReindexReader(params index.Params, log *message.Reader, version index.Version) ([]index.Item, error) {
 	var position = log.InitialPosition()
 	var indexTime int64
 	var items []index.Item
@@ -266,19 +254,19 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader) ([]inde
 		indexTime = item.Timestamp
 	}
 
-	if err := index.Write(s.Index, params, items, s.IndexFormat); err != nil {
+	if err := index.Write(s.Index, s.Offset, version, params, items); err != nil {
 		return nil, err
 	}
 	return items, nil
 }
 
 func (s Segment) Backup(targetDir string) error {
-	logName, err := filepath.Rel(s.Dir, s.Data)
+	logName, err := filepath.Rel(s.Dir, s.Log)
 	if err != nil {
 		return fmt.Errorf("backup log rel: %w", err)
 	}
 	targetLog := filepath.Join(targetDir, logName)
-	if err := copyFile(s.Data, targetLog); err != nil {
+	if err := copyFile(s.Log, targetLog); err != nil {
 		return fmt.Errorf("backup log copy: %w", err)
 	}
 
@@ -291,11 +279,21 @@ func (s Segment) Backup(targetDir string) error {
 		return fmt.Errorf("backup index copy: %w", err)
 	}
 
+	if err := s.syncDir(); err != nil {
+		return fmt.Errorf("backup sync dir: %w", err)
+	}
+
 	return nil
 }
 
-func (olds Segment) Migrate() (Segment, error) {
-	if olds.DataFormat == message.FormatSegment {
+func (olds Segment) Migrate(version message.Version) (Segment, error) {
+	oldLog, err := message.OpenReader(olds.Log, olds.Offset)
+	if err != nil {
+		return Segment{}, fmt.Errorf("migrate open reader: %w", err)
+	}
+	defer func() { _ = oldLog.Close() }()
+
+	if oldLog.Version() == version {
 		return olds, nil
 	}
 
@@ -306,19 +304,12 @@ func (olds Segment) Migrate() (Segment, error) {
 		return Segment{}, fmt.Errorf("migrate index remove: %w", err)
 	}
 
-	s := New(olds.Dir, olds.Offset, message.FormatSegment)
-
-	oldLog, err := message.OpenReader(olds.Data, olds.DataFormat)
-	if err != nil {
-		return Segment{}, fmt.Errorf("migrate open reader: %w", err)
-	}
-	defer func() { _ = oldLog.Close() }()
-
-	migratedPath := s.Data + ".migrate"
+	s := olds.NewAt(olds.Offset) // TODO NewForMigrate
+	migratedPath := s.Log + ".migrate"
 	if err := os.Remove(migratedPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Segment{}, fmt.Errorf("migrate remove stale temp: %w", err)
 	}
-	migratedLog, err := message.OpenWriter(migratedPath, s.DataFormat)
+	migratedLog, err := message.OpenWriter(migratedPath, s.Offset, version)
 	if err != nil {
 		return Segment{}, fmt.Errorf("migrate open writer: %w", err)
 	}
@@ -347,11 +338,8 @@ func (olds Segment) Migrate() (Segment, error) {
 		return Segment{}, fmt.Errorf("migrate close migrated log: %w", err)
 	}
 
-	if err := os.Rename(migratedLog.Path, s.Data); err != nil {
+	if err := os.Rename(migratedLog.Path, s.Log); err != nil {
 		return Segment{}, fmt.Errorf("migrate log rename: %w", err)
-	}
-	if err := os.Remove(oldLog.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return Segment{}, fmt.Errorf("migrate old log delete: %w", err)
 	}
 
 	if err := s.syncDir(); err != nil {
@@ -362,7 +350,7 @@ func (olds Segment) Migrate() (Segment, error) {
 }
 
 func (olds Segment) Rename(news Segment) error {
-	if err := os.Rename(olds.Data, news.Data); err != nil {
+	if err := os.Rename(olds.Log, news.Log); err != nil {
 		return fmt.Errorf("rename log rename: %w", err)
 	}
 
@@ -383,7 +371,7 @@ func (olds Segment) Override(news Segment) error {
 		return fmt.Errorf("override index delete: %w", err)
 	}
 
-	if err := os.Rename(olds.Data, news.Data); err != nil {
+	if err := os.Rename(olds.Log, news.Log); err != nil {
 		return fmt.Errorf("override log rename: %w", err)
 	}
 	if err := os.Rename(olds.Index, news.Index); err != nil {
@@ -401,28 +389,16 @@ func (s Segment) Remove() error {
 	if err := os.Remove(s.Index); err != nil {
 		return fmt.Errorf("remove index delete: %w", err)
 	}
-	if err := os.Remove(s.Data); err != nil {
+	if err := os.Remove(s.Log); err != nil {
 		return fmt.Errorf("remove log delete: %w", err)
-	}
-
-	if err := s.syncDir(); err != nil {
-		return fmt.Errorf("remove sync dir: %w", err)
-	}
-
-	return nil
-}
-
-func (s Segment) RemoveData() error {
-	if err := os.Remove(s.Data); err != nil {
-		return fmt.Errorf("remove log delete: %w", err)
-	}
-	if err := s.syncDir(); err != nil {
-		return fmt.Errorf("remove sync dir: %w", err)
 	}
 	return nil
 }
 
 func (s Segment) syncDir() error {
+	if !s.AutoSync {
+		return nil
+	}
 	return kdir.Sync(s.Dir)
 }
 
@@ -437,7 +413,7 @@ type RewriteSegment struct {
 
 func (r *RewriteSegment) GetNewSegment() Segment {
 	lowestOffset := message.MinOffset(r.SurviveOffsets)
-	return New(r.Dir, lowestOffset, r.DataFormat)
+	return r.NewAt(lowestOffset)
 }
 
 func (s Segment) forRewrite() (*RewriteSegment, error) {
@@ -447,31 +423,31 @@ func (s Segment) forRewrite() (*RewriteSegment, error) {
 	}
 
 	dst := &RewriteSegment{
-		Segment: New(s.Dir, s.Offset, message.FormatSegment),
+		Segment: s.NewAt(s.Offset),
 
 		SurviveOffsets: map[int64]struct{}{},
 		DeletedOffsets: map[int64]struct{}{},
 	}
 
-	dst.Data = fmt.Sprintf("%s.rewrite.%s", s.Data, randStr)
+	dst.Log = fmt.Sprintf("%s.rewrite.%s", s.Log, randStr)
 	dst.Index = fmt.Sprintf("%s.rewrite.%s", s.Index, randStr)
 
 	return dst, nil
 }
 
-func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) (*RewriteSegment, error) {
+func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, mversion message.Version, iversion index.Version) (*RewriteSegment, error) {
 	dst, err := src.forRewrite()
 	if err != nil {
 		return nil, err
 	}
 
-	srcLog, err := message.OpenReader(src.Data, src.DataFormat)
+	srcLog, err := message.OpenReader(src.Log, src.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = srcLog.Close() }()
 
-	dstLog, err := message.OpenWriter(dst.Data, dst.DataFormat)
+	dstLog, err := message.OpenWriter(dst.Log, dst.Offset, mversion)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +467,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 
 		if _, ok := dropOffsets[msg.Offset]; ok {
 			dst.DeletedOffsets[msg.Offset] = struct{}{}
-			dst.DeletedSize += message.Size(msg, src.DataFormat) + params.Size()
+			dst.DeletedSize += message.Size(msg, mversion) + params.Size()
 		} else {
 			dstPosition, err := dstLog.Write(msg)
 			if err != nil {
@@ -513,7 +489,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params) 
 	if err := dstLog.SyncAndClose(); err != nil {
 		return nil, err
 	}
-	if err := index.Write(dst.Index, params, dstItems, dst.IndexFormat); err != nil {
+	if err := index.Write(dst.Index, dst.Offset, iversion, params, dstItems); err != nil {
 		return nil, err
 	}
 

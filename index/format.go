@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-
-	"github.com/klev-dev/klevdb/pkg/kdir"
 )
 
 var ErrCorrupted = errors.New("index corrupted")
@@ -18,72 +16,78 @@ var magic = [6]byte{0xFF, 'k', 'l', 'e', 'v', 'i'}
 
 const HeaderSize = int64(len(magic) + 2) // magic + version + params
 
-func headerNew(v version, opts Params) []byte {
-	h := make([]byte, HeaderSize)
-	copy(h, magic[:])
-	h[len(magic)] = byte(v)
-
-	if opts.Times {
-		h[len(magic)+1] |= timesBit
-	}
-
-	if opts.Keys {
-		h[len(magic)+1] |= keysBit
-	}
-
-	return h
+type Version struct {
+	marker  byte
+	invalid bool
 }
 
-func headerParse(h []byte, opts Params) (version, error) {
+var (
+	VUnknown         = Version{invalid: true}
+	V1               = Version{marker: 0}
+	V2               = Version{marker: 1}
+	VLast    Version = V2 // always last version
+)
+
+func (v Version) newHeader(opts Params) ([]byte, error) {
+	switch v {
+	case V1:
+		return nil, nil
+	case V2:
+		h := make([]byte, HeaderSize)
+		copy(h, magic[:])
+		h[len(magic)] = byte(v.marker)
+
+		if opts.Times {
+			h[len(magic)+1] |= timesBit
+		}
+
+		if opts.Keys {
+			h[len(magic)+1] |= keysBit
+		}
+
+		return h, nil
+	default:
+		return nil, fmt.Errorf("unknown version: %v", v)
+	}
+}
+
+func headerParse(h []byte, offset int64, opts Params) (Version, error) {
 	data, magicFound := bytes.CutPrefix(h, magic[:])
 	switch {
 	case !magicFound:
-		return v0, fmt.Errorf("%w: magic prefix not found", ErrCorrupted) // TODO specific error
-	case data[0] > byte(vLast):
-		return v0, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
+		if int64(binary.BigEndian.Uint64(h)) == offset {
+			return V1, nil
+		}
+		return VUnknown, fmt.Errorf("%w: magic prefix not found", ErrCorrupted) // TODO specific error
+	case data[0] > byte(VLast.marker):
+		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
 	case opts.Times != ((data[1] & timesBit) == timesBit):
-		return v0, fmt.Errorf("%w: times index mismatch", ErrCorrupted) // TODO specific error
+		return VUnknown, fmt.Errorf("%w: times index mismatch", ErrCorrupted) // TODO specific error
 	case opts.Keys != ((data[1] & keysBit) == keysBit):
-		return v0, fmt.Errorf("%w: keys index mismatch", ErrCorrupted) // TODO specific error
+		return VUnknown, fmt.Errorf("%w: keys index mismatch", ErrCorrupted) // TODO specific error
 	case (data[1] & unusedBits) > 0:
-		return v0, fmt.Errorf("%w: invalid reserved data", ErrCorrupted) // TODO specific error
+		return VUnknown, fmt.Errorf("%w: invalid reserved data", ErrCorrupted) // TODO specific error
+	case data[0] == V2.marker:
+		return V2, nil
+	default:
+		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
 	}
-	return version(data[0]), nil
 }
-
-type version byte
-
-const (
-	v0    version = 0
-	v1    version = 1
-	vLast version = v1 // always last version
-)
 
 const timesBit byte = 0b00000001
 const keysBit byte = 0b00000010
 const unusedBits byte = 0b11111100
-
-type DetectedFormat struct {
-	name      string
-	hasHeader bool
-	version
-}
-
-var (
-	FormatLog     = DetectedFormat{name: "log", hasHeader: false, version: v0}
-	FormatSegment = DetectedFormat{name: "segment", hasHeader: true, version: vLast}
-)
 
 type Writer struct {
 	opts    Params
 	f       *os.File
 	pos     int64
 	buff    []byte
-	version version
+	version Version
 	writer  func(Item) error
 }
 
-func OpenWriter(path string, opts Params, format DetectedFormat) (w *Writer, retErr error) {
+func OpenWriter(path string, offset int64, newVersion Version, opts Params) (w *Writer, retErr error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("write index open: %w", err)
@@ -99,40 +103,36 @@ func OpenWriter(path string, opts Params, format DetectedFormat) (w *Writer, ret
 		return nil, fmt.Errorf("write index stat: %w", err)
 	}
 
-	if stat.Size() == 0 {
-		if err := kdir.SyncParent(path); err != nil {
-			return nil, fmt.Errorf("write index dir sync: %w", err)
-		}
-	}
-
 	pos := stat.Size()
-	version := format.version
-	if format.hasHeader {
-		if pos == 0 {
-			h := headerNew(format.version, opts)
-			if _, err := f.Write(h[:]); err != nil {
-				return nil, fmt.Errorf("write index header: %w", err)
-			}
-			pos = int64(len(h))
-		} else {
-			fr, err := os.Open(path)
-			if err != nil {
-				return nil, fmt.Errorf("write index read header: %w", err)
-			}
-			defer func() { _ = fr.Close() }()
+	var v Version
+	if pos == 0 {
+		h, err := newVersion.newHeader(opts) // TODO configure upgrades?
+		if err != nil {
+			return nil, fmt.Errorf("write index header: %w", err)
+		}
+		if _, err := f.Write(h[:]); err != nil {
+			return nil, fmt.Errorf("write index header: %w", err)
+		}
+		pos = int64(len(h))
+		v = newVersion
+	} else {
+		fr, err := os.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("write index read header: %w", err)
+		}
+		defer func() { _ = fr.Close() }()
 
-			var h [HeaderSize]byte
-			if _, err := fr.ReadAt(h[:], 0); err != nil {
-				return nil, fmt.Errorf("write index read header: %w", err)
-			}
-			version, err = headerParse(h[:], opts)
-			if err != nil {
-				return nil, fmt.Errorf("write index parse header: %w", err)
-			}
+		var h [HeaderSize]byte
+		if _, err := fr.ReadAt(h[:], 0); err != nil {
+			return nil, fmt.Errorf("write index read header: %w", err)
+		}
+		v, err = headerParse(h[:], offset, opts)
+		if err != nil {
+			return nil, fmt.Errorf("write index parse header: %w", err)
 		}
 	}
 
-	w = &Writer{opts: opts, f: f, pos: pos, version: version}
+	w = &Writer{opts: opts, f: f, pos: pos, version: v}
 
 	switch {
 	case opts.Times && opts.Keys:
@@ -249,8 +249,8 @@ func (w *Writer) SyncAndClose() error {
 	return w.Close()
 }
 
-func Write(path string, opts Params, index []Item, format DetectedFormat) (retErr error) {
-	w, err := OpenWriter(path, opts, format)
+func Write(path string, offset int64, newVersion Version, opts Params, index []Item) (retErr error) {
+	w, err := OpenWriter(path, offset, newVersion, opts)
 	if err != nil {
 		return err
 	}
@@ -269,7 +269,7 @@ func Write(path string, opts Params, index []Item, format DetectedFormat) (retEr
 	return w.SyncAndClose()
 }
 
-func Read(path string, opts Params, format DetectedFormat) ([]Item, error) {
+func Read(path string, offset int64, opts Params) ([]Item, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read index open: %w", err)
@@ -282,24 +282,24 @@ func Read(path string, opts Params, format DetectedFormat) ([]Item, error) {
 	}
 	dataSize := stat.Size()
 
-	v := v0
-	if format.hasHeader {
-		var h [HeaderSize]byte
-		if _, err := io.ReadFull(f, h[:]); err != nil {
-			return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
-		}
-		v, err = headerParse(h[:], opts)
-		if err != nil {
-			return nil, fmt.Errorf("parse index header: %w", err)
-		}
-		dataSize -= int64(len(h))
+	var h [HeaderSize]byte
+	if _, err := io.ReadFull(f, h[:]); err != nil {
+		return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
 	}
-	// v0 and v1 have identical item encoding; the version field is reserved for
-	// a future item format change. Add a new case here before changing item encoding.
+	v, err := headerParse(h[:], offset, opts)
+	if err != nil {
+		return nil, fmt.Errorf("parse index header: %w", err)
+	}
+
 	switch v {
-	case v0, v1:
+	case V1:
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("read index seek: %w", err)
+		}
+	case V2:
+		dataSize -= int64(len(h))
 	default:
-		return nil, fmt.Errorf("%w: unknown version %d", ErrCorrupted, v)
+		return nil, fmt.Errorf("%w: unknown version %d", ErrCorrupted, v.marker)
 	}
 
 	itemSize := opts.Size()
@@ -315,7 +315,7 @@ func Read(path string, opts Params, format DetectedFormat) ([]Item, error) {
 	var keyOffset = opts.keyOffset()
 
 	var items = make([]Item, dataSize/int64(itemSize))
-	for i := range items {
+	for i := range items { // TODO potentially reader func
 		pos := i * int(itemSize)
 
 		items[i].Offset = int64(binary.BigEndian.Uint64(data[pos:]))
@@ -330,4 +330,36 @@ func Read(path string, opts Params, format DetectedFormat) ([]Item, error) {
 		}
 	}
 	return items, nil
+}
+
+func Stat(path string, offset int64, opts Params) (int64, int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return -1, -1, fmt.Errorf("read index open: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	stat, err := os.Stat(path)
+	if err != nil {
+		return -1, -1, fmt.Errorf("read index stat: %w", err)
+	}
+	dataSize := stat.Size()
+
+	var h [HeaderSize]byte
+	if _, err := io.ReadFull(f, h[:]); err != nil {
+		return -1, -1, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
+	}
+	v, err := headerParse(h[:], offset, opts)
+	if err != nil {
+		return -1, -1, fmt.Errorf("parse index header: %w", err)
+	}
+
+	switch v {
+	case V1:
+		return dataSize, int(dataSize / opts.Size()), nil
+	case V2:
+		return dataSize, int((dataSize - int64(len(h))) / opts.Size()), nil
+	default:
+		return -1, -1, fmt.Errorf("%w: unknown version %d", ErrCorrupted, v.marker)
+	}
 }

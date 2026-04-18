@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -13,79 +12,30 @@ import (
 	"github.com/klev-dev/klevdb/pkg/kdir"
 )
 
-func Find(dir string) ([]Segment, error) {
+func Find(dir string, autoSync bool) ([]Segment, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("find read dir: %w", err)
 	}
 
-	// os.ReadDir returns sorted entries; for the same numeric offset, .log ('l')
-	// sorts before .segment ('s'). We track seen offsets so that if both exist
-	// (e.g. after a partial migration), the .segment entry wins.
 	var segments []Segment
-	seen := make(map[int64]int) // offset -> index in segments slice
 
 	for _, f := range files {
-		if offsetStr, ok := strings.CutSuffix(f.Name(), ".segment"); ok {
+		if offsetStr, ok := strings.CutSuffix(f.Name(), ".log"); ok {
 			offset, err := strconv.ParseInt(offsetStr, 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("find parse offset: %w", err)
 			}
 
-			if i, exists := seen[offset]; exists {
-				segments[i] = New(dir, offset, message.FormatSegment) // upgrade .log entry
-			} else {
-				seen[offset] = len(segments)
-				segments = append(segments, New(dir, offset, message.FormatSegment))
-			}
-		} else if offsetStr, ok := strings.CutSuffix(f.Name(), ".log"); ok {
-			offset, err := strconv.ParseInt(offsetStr, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("find parse offset: %w", err)
-			}
-
-			if _, exists := seen[offset]; !exists {
-				seen[offset] = len(segments)
-				segments = append(segments, New(dir, offset, message.FormatLog))
-			}
+			segments = append(segments, New(dir, offset, autoSync))
 		}
 	}
 
 	return segments, nil
 }
 
-func CleanupOrphanLogs(dir string) error {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return fmt.Errorf("cleanup read dir: %w", err)
-	}
-
-	var removed bool
-	for _, f := range files {
-		offsetStr, ok := strings.CutSuffix(f.Name(), ".segment")
-		if !ok {
-			continue
-		}
-		orphan := filepath.Join(dir, offsetStr+".log")
-		switch err := os.Remove(orphan); {
-		case err == nil:
-			removed = true
-		case errors.Is(err, os.ErrNotExist):
-		default:
-			return fmt.Errorf("cleanup orphan log: %w", err)
-		}
-	}
-
-	if removed {
-		if err := kdir.Sync(dir); err != nil {
-			return fmt.Errorf("cleanup sync dir: %w", err)
-		}
-	}
-	return nil
-}
-
 func StatDir(dir string, params index.Params) (Stats, error) {
-	segments, err := Find(dir)
+	segments, err := Find(dir, false) // no need to autoSync for find
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return Stats{}, nil
@@ -111,7 +61,7 @@ func Stat(segments []Segment, params index.Params) (Stats, error) {
 }
 
 func CheckDir(dir string, params index.Params) error {
-	switch segments, err := Find(dir); {
+	switch segments, err := Find(dir, false); { // no need to autoSync for check
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -128,7 +78,7 @@ func CheckDir(dir string, params index.Params) error {
 }
 
 func RecoverDir(dir string, params index.Params) error {
-	switch segments, err := Find(dir); {
+	switch segments, err := Find(dir, true); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -144,8 +94,8 @@ func RecoverDir(dir string, params index.Params) error {
 	}
 }
 
-func MigrateDir(dir string, params index.Params) error {
-	switch segments, err := Find(dir); {
+func MigrateDir(dir string, version message.Version, params index.Params) error {
+	switch segments, err := Find(dir, true); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -154,16 +104,16 @@ func MigrateDir(dir string, params index.Params) error {
 		return nil
 	default:
 		for _, seg := range segments {
-			if _, err := seg.Migrate(); err != nil {
+			if _, err := seg.Migrate(version); err != nil {
 				return err
 			}
 		}
-		return CleanupOrphanLogs(dir)
+		return nil
 	}
 }
 
 func BackupDir(dir, target string) error {
-	switch segments, err := Find(dir); {
+	switch segments, err := Find(dir, false); { // manually autoSync on backup
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case err != nil:
@@ -177,11 +127,15 @@ func BackupDir(dir, target string) error {
 	}
 }
 
-func Backup(segments []Segment, dir string) error {
+func Backup(segments []Segment, target string) error {
 	for _, seg := range segments {
-		if err := seg.Backup(dir); err != nil {
+		if err := seg.Backup(target); err != nil {
 			return fmt.Errorf("backup %d: %w", seg.Offset, err)
 		}
+	}
+
+	if err := kdir.Sync(target); err != nil {
+		return fmt.Errorf("backup dir sync: %w", err)
 	}
 
 	return nil

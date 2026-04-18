@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLogWriteRead(t *testing.T) {
+func TestWriteReadV1(t *testing.T) {
 	msgs := Gen(2)
 	for i := range msgs {
 		msgs[i].Offset = int64(i + 5)
 	}
 
 	path := filepath.Join(t.TempDir(), "test.log")
-	w, err := OpenWriter(path, FormatLog)
+	w, err := OpenWriter(path, 0, V1)
 	require.NoError(t, err)
 
 	pos, err := w.Write(msgs[0])
@@ -25,13 +25,16 @@ func TestLogWriteRead(t *testing.T) {
 
 	pos, err = w.Write(msgs[1])
 	require.NoError(t, err)
-	require.Equal(t, Size(msgs[0], FormatLog), pos)
+	require.Equal(t, Size(msgs[0], V1), pos)
 
 	err = w.SyncAndClose()
 	require.NoError(t, err)
 
+	// V0 detection: OpenReader(path, offset) detects V0 when the first 8 bytes
+	// of the file equal the segment offset. msgs[0].Offset == 5 is used as the
+	// segment offset so detection works correctly.
 	t.Run("Direct", func(t *testing.T) {
-		r, err := OpenReader(path, FormatLog)
+		r, err := OpenReader(path, msgs[0].Offset)
 		require.NoError(t, err)
 
 		msg, err := r.Get(0)
@@ -47,7 +50,7 @@ func TestLogWriteRead(t *testing.T) {
 	})
 
 	t.Run("Mem", func(t *testing.T) {
-		r, err := OpenReaderMem(path, FormatLog)
+		r, err := OpenReaderMem(path, msgs[0].Offset)
 		require.NoError(t, err)
 
 		msg, err := r.Get(0)
@@ -63,14 +66,14 @@ func TestLogWriteRead(t *testing.T) {
 	})
 }
 
-func TestSegmentWriteRead(t *testing.T) {
+func TestWriteReadV2(t *testing.T) {
 	msgs := Gen(2)
 	for i := range msgs {
 		msgs[i].Offset = int64(i + 5)
 	}
 
-	path := filepath.Join(t.TempDir(), "test.segment")
-	w, err := OpenWriter(path, FormatSegment)
+	path := filepath.Join(t.TempDir(), "test.log")
+	w, err := OpenWriter(path, 0, V2)
 	require.NoError(t, err)
 
 	pos, err := w.Write(msgs[0])
@@ -79,13 +82,13 @@ func TestSegmentWriteRead(t *testing.T) {
 
 	pos, err = w.Write(msgs[1])
 	require.NoError(t, err)
-	require.Equal(t, HeaderSize+Size(msgs[0], FormatSegment), pos)
+	require.Equal(t, HeaderSize+Size(msgs[0], V2), pos)
 
 	err = w.SyncAndClose()
 	require.NoError(t, err)
 
 	t.Run("Direct", func(t *testing.T) {
-		r, err := OpenReader(path, FormatSegment)
+		r, err := OpenReader(path, 0)
 		require.NoError(t, err)
 		msg, err := r.Get(int64(HeaderSize))
 		require.NoError(t, err)
@@ -94,7 +97,7 @@ func TestSegmentWriteRead(t *testing.T) {
 	})
 
 	t.Run("Mem", func(t *testing.T) {
-		r, err := OpenReaderMem(path, FormatSegment)
+		r, err := OpenReaderMem(path, 0)
 		require.NoError(t, err)
 		msg, err := r.Get(int64(HeaderSize))
 		require.NoError(t, err)
@@ -103,8 +106,8 @@ func TestSegmentWriteRead(t *testing.T) {
 	})
 }
 
-func TestSegmentInvalidHeader(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "test.segment")
+func TestInvalidHeaderV2(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.log")
 	f, err := os.Create(path)
 	require.NoError(t, err)
 	_, err = f.Write([]byte("badmagic"))
@@ -112,19 +115,19 @@ func TestSegmentInvalidHeader(t *testing.T) {
 	require.NoError(t, f.Close())
 
 	t.Run("Direct", func(t *testing.T) {
-		_, err := OpenReader(path, FormatSegment)
+		_, err := OpenReader(path, 0)
 		require.ErrorIs(t, err, ErrCorrupted)
 	})
 
 	t.Run("Mem", func(t *testing.T) {
-		_, err := OpenReaderMem(path, FormatSegment)
+		_, err := OpenReaderMem(path, 0)
 		require.ErrorIs(t, err, ErrCorrupted)
 	})
 }
 
-func TestPartialMessageHeader(t *testing.T) {
+func TestPartialMessageHeaderV2(t *testing.T) {
 	// A 1-byte file simulates a crash mid-header-write; OpenReader must return ErrCorrupted.
-	path := filepath.Join(t.TempDir(), "test.segment")
+	path := filepath.Join(t.TempDir(), "test.log")
 	f, err := os.Create(path)
 	require.NoError(t, err)
 	_, err = f.Write([]byte{0xFF}) // just one byte of the 8-byte magic
@@ -132,36 +135,38 @@ func TestPartialMessageHeader(t *testing.T) {
 	require.NoError(t, f.Close())
 
 	t.Run("Direct", func(t *testing.T) {
-		_, err := OpenReader(path, FormatSegment)
+		_, err := OpenReader(path, 0)
 		require.ErrorIs(t, err, ErrCorrupted)
 	})
 
 	t.Run("Mem", func(t *testing.T) {
-		_, err := OpenReaderMem(path, FormatSegment)
+		_, err := OpenReaderMem(path, 0)
 		require.ErrorIs(t, err, ErrCorrupted)
 	})
 }
 
-func TestSegmentReadv1LargeTotalLength(t *testing.T) {
+func TestSegmentReadV2LargeTotalLength(t *testing.T) {
 	// A corrupt totalLength = 0x7FFFFFFF passes the negative guard but must be
 	// rejected before attempting a ~2 GB allocation.
-	path := filepath.Join(t.TempDir(), "test.segment")
+	path := filepath.Join(t.TempDir(), "test.log")
 	f, err := os.Create(path)
 	require.NoError(t, err)
 
-	_, err = f.Write(headerNew(v1))
+	h, err := V2.newHeader()
+	require.NoError(t, err)
+	_, err = f.Write(h)
 	require.NoError(t, err)
 
 	// Crafted message header: totalLength=0x7FFFFFFF, valueSize=0 — CRC left as
 	// zeros (the size guard fires before the CRC check).
 	var hdr [msgHeaderSize]byte
 	binary.BigEndian.PutUint32(hdr[4:], 0x7FFFFFFF) // totalLength = max int32
-	binary.BigEndian.PutUint32(hdr[24:], 0)          // valueSize = 0
+	binary.BigEndian.PutUint32(hdr[24:], 0)         // valueSize = 0
 	_, err = f.Write(hdr[:])
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	r, err := OpenReader(path, FormatSegment)
+	r, err := OpenReader(path, 0)
 	require.NoError(t, err)
 	defer r.Close()
 
@@ -169,17 +174,19 @@ func TestSegmentReadv1LargeTotalLength(t *testing.T) {
 	require.ErrorIs(t, err, ErrCorrupted)
 }
 
-func TestSegmentReadv1NegativeValueSize(t *testing.T) {
+func TestSegmentReadV2NegativeValueSize(t *testing.T) {
 	// Regression test: a negative valueSize (high bit set in the uint32 field) must
 	// be rejected as ErrCorrupted, not cause a slice-bounds panic.
 	// With totalLength=28 and valueSize=int32(-9), keySize derives as 9 but dataSize
 	// is only 8 — without the valueSize<0 guard, msg.Key = dataBytes[:9] panics.
-	path := filepath.Join(t.TempDir(), "test.segment")
+	path := filepath.Join(t.TempDir(), "test.log")
 	f, err := os.Create(path)
 	require.NoError(t, err)
 
 	// Valid file header
-	_, err = f.Write(headerNew(v1))
+	h, err := V2.newHeader()
+	require.NoError(t, err)
+	_, err = f.Write(h)
 	require.NoError(t, err)
 
 	// Crafted v1 message header: totalLength=28, offset=0, time=0, valueSize=0xFFFFFFF7
@@ -191,7 +198,7 @@ func TestSegmentReadv1NegativeValueSize(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	r, err := OpenReader(path, FormatSegment)
+	r, err := OpenReader(path, 0)
 	require.NoError(t, err)
 	defer r.Close()
 
@@ -199,9 +206,9 @@ func TestSegmentReadv1NegativeValueSize(t *testing.T) {
 	require.ErrorIs(t, err, ErrCorrupted)
 }
 
-func TestLogSize(t *testing.T) {
+func TestSizeV1(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.log")
-	w, err := OpenWriter(path, FormatLog)
+	w, err := OpenWriter(path, 0, V1)
 	require.NoError(t, err)
 
 	msg := Message{
@@ -212,12 +219,12 @@ func TestLogSize(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(0), pos)
 
-	require.Equal(t, w.pos, Size(msg, FormatLog))
+	require.Equal(t, w.pos, Size(msg, V1))
 }
 
-func TestSegmentSize(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "test.segment")
-	w, err := OpenWriter(path, FormatSegment)
+func TestSizeV2(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.log")
+	w, err := OpenWriter(path, 0, V2)
 	require.NoError(t, err)
 
 	msg := Message{
@@ -228,5 +235,5 @@ func TestSegmentSize(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, HeaderSize, pos)
 
-	require.Equal(t, w.pos, HeaderSize+Size(msg, FormatSegment))
+	require.Equal(t, w.pos, HeaderSize+Size(msg, V2))
 }

@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/klev-dev/klevdb/pkg/kdir"
 	"golang.org/x/exp/mmap"
 )
 
@@ -27,54 +26,62 @@ var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
 var magic = [6]byte{0xFF, 'k', 'l', 'e', 'v', 's'}
 
-const HeaderSize = int64(len(magic) + 2) // magic + version byte + reserved byte
+const HeaderSize = int64(len(magic) + 2) // magic + Version byte + reserved byte
 
-func headerNew(v version) []byte {
-	h := make([]byte, HeaderSize)
-	copy(h, magic[:])
-	h[len(magic)] = byte(v)
-	h[len(magic)+1] = 0
-	return h
-}
-
-func headerParse(h []byte) (version, error) {
-	data, magicFound := bytes.CutPrefix(h, magic[:])
-	switch {
-	case !magicFound:
-		return v0, fmt.Errorf("%w: magic prefix not found", ErrCorrupted) // TODO specific error
-	case data[0] > byte(vLast):
-		return v0, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
-	case data[1] != 0:
-		return v0, fmt.Errorf("%w: invalid reserved data", ErrCorrupted) // TODO specific error
-	}
-	return version(data[0]), nil
-}
-
-type version byte
-
-const (
-	v0    version = 0
-	v1    version = 1
-	vLast version = v1 // always last version
-)
-
-type DetectedFormat struct {
-	name      string
-	hasHeader bool
-	version
+type Version struct {
+	marker  byte
+	invalid bool
 }
 
 var (
-	FormatLog     = DetectedFormat{name: "log", hasHeader: false, version: v0}
-	FormatSegment = DetectedFormat{name: "segment", hasHeader: true, version: vLast}
+	VUnknown         = Version{invalid: true}
+	V1               = Version{marker: 0}
+	V2               = Version{marker: 1}
+	VLast    Version = V2 // always last version
 )
 
-func Size(m Message, format DetectedFormat) int64 {
-	switch format {
-	case FormatLog:
-		return int64(28 + len(m.Key) + len(m.Value))
+func (v Version) newHeader() ([]byte, error) {
+	switch v {
+	case V1:
+		return nil, nil
+	case V2:
+		h := make([]byte, HeaderSize)
+		copy(h, magic[:])
+		h[len(magic)] = byte(v.marker)
+		h[len(magic)+1] = 0
+		return h, nil
 	default:
+		return nil, fmt.Errorf("unknown version: %v", v)
+	}
+}
+
+func headerParse(h []byte, offset int64) (Version, error) {
+	data, magicFound := bytes.CutPrefix(h, magic[:])
+	switch {
+	case !magicFound:
+		if int64(binary.BigEndian.Uint64(h)) == offset {
+			return V1, nil
+		}
+		return VUnknown, fmt.Errorf("%w: magic prefix not found", ErrCorrupted) // TODO specific error
+	case data[0] > byte(VLast.marker):
+		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
+	case data[1] != 0:
+		return VUnknown, fmt.Errorf("%w: invalid reserved data", ErrCorrupted) // TODO specific error
+	case data[0] == V2.marker:
+		return V2, nil
+	default:
+		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
+	}
+}
+
+func Size(m Message, v Version) int64 {
+	switch v {
+	case V1:
+		return int64(28 + len(m.Key) + len(m.Value))
+	case V2:
 		return int64(fixedSize + len(m.Key) + len(m.Value))
+	default:
+		return -1 // TODO
 	}
 }
 
@@ -83,11 +90,11 @@ type Writer struct {
 	f       *os.File
 	pos     int64
 	buff    []byte
-	version version
+	version Version
 	writer  func(m Message) (int64, error)
 }
 
-func OpenWriter(path string, format DetectedFormat) (w *Writer, retErr error) {
+func OpenWriter(path string, offset int64, newVersion Version) (w *Writer, retErr error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("write log open: %w", err)
@@ -103,45 +110,43 @@ func OpenWriter(path string, format DetectedFormat) (w *Writer, retErr error) {
 		return nil, fmt.Errorf("write log stat: %w", err)
 	}
 
-	if stat.Size() == 0 {
-		if err := kdir.SyncParent(path); err != nil {
-			return nil, fmt.Errorf("write log dir sync: %w", err)
-		}
-	}
-
 	pos := stat.Size()
-	version := format.version
-	if format.hasHeader {
-		if pos == 0 {
-			h := headerNew(format.version)
-			if _, err := f.Write(h[:]); err != nil {
-				return nil, fmt.Errorf("write log header: %w", err)
-			}
-			pos = int64(len(h))
-		} else {
-			fr, err := os.Open(path)
-			if err != nil {
-				return nil, fmt.Errorf("write log read header: %w", err)
-			}
-			defer func() { _ = fr.Close() }()
+	var v Version
+	if pos == 0 {
+		h, err := newVersion.newHeader()
+		if err != nil {
+			return nil, fmt.Errorf("write log header: %w", err)
+		}
+		if _, err := f.Write(h[:]); err != nil {
+			return nil, fmt.Errorf("write log header: %w", err)
+		}
+		pos = int64(len(h))
+		v = newVersion
+	} else {
+		fr, err := os.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("write log read header: %w", err)
+		}
+		defer func() { _ = fr.Close() }()
 
-			var h [HeaderSize]byte
-			if _, err := fr.ReadAt(h[:], 0); err != nil {
-				return nil, fmt.Errorf("write log read header: %w", err)
-			}
-			version, err = headerParse(h[:])
-			if err != nil {
-				return nil, fmt.Errorf("write log parse header: %w", err)
-			}
+		var h [HeaderSize]byte
+		if _, err := fr.ReadAt(h[:], 0); err != nil {
+			return nil, fmt.Errorf("write log read header: %w", err)
+		}
+		v, err = headerParse(h[:], offset)
+		if err != nil {
+			return nil, fmt.Errorf("write log parse header: %w", err)
 		}
 	}
 
-	w = &Writer{Path: path, f: f, pos: pos, version: version}
-	switch version {
-	case v0:
-		w.writer = w.writeV0
-	default:
+	w = &Writer{Path: path, f: f, pos: pos, version: v}
+	switch v {
+	case V1:
 		w.writer = w.writeV1
+	case V2:
+		w.writer = w.writeV2
+	default:
+		return nil, fmt.Errorf("unknown version: %v", v)
 	}
 	return w, nil
 }
@@ -150,7 +155,7 @@ func (w *Writer) Write(m Message) (int64, error) {
 	return w.writer(m)
 }
 
-func (w *Writer) writeV0(m Message) (int64, error) {
+func (w *Writer) writeV1(m Message) (int64, error) {
 	var fullSize = 8 + // offset
 		8 + // unix micro
 		4 + // key size
@@ -187,15 +192,15 @@ func (w *Writer) writeV0(m Message) (int64, error) {
 const trailerMagic uint64 = 0xDEADBEEFFEEDFACE
 
 const (
-	msgHeaderSize    = 4 + 4 + 8 + 8 + 4         // 28: crc+totallen+offset+unixmicro+valuelen
+	msgHeaderSize    = 4 + 4 + 8 + 8 + 4 // 28: crc+totallen+offset+unixmicro+valuelen
 	trailerSize      = 8
 	fixedSize        = msgHeaderSize + trailerSize // 36 total overhead
-	totalLengthFixed = 8 + 8 + 4 + trailerSize    // 28: offset+unixmicro+valuelen+trailer (no key/val)
+	totalLengthFixed = 8 + 8 + 4 + trailerSize     // 28: offset+unixmicro+valuelen+trailer (no key/val)
 
 	maxMessageBodySize = 64 * 1024 * 1024 // 64 MiB: guard against corrupt totalLength causing huge allocation
 )
 
-func (w *Writer) writeV1(m Message) (int64, error) {
+func (w *Writer) writeV2(m Message) (int64, error) {
 	fullSize := fixedSize + len(m.Key) + len(m.Value)
 
 	if w.buff == nil || cap(w.buff) < fullSize {
@@ -257,11 +262,11 @@ type Reader struct {
 	Path   string
 	r      *os.File
 	ra     *mmap.ReaderAt
-	v      version
+	v      Version // TODO make public
 	reader func(position int64, msg *Message) (nextPosition int64, err error)
 }
 
-func OpenReader(path string, format DetectedFormat) (r *Reader, retErr error) {
+func OpenReader(path string, offset int64) (r *Reader, retErr error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read log open: %w", err)
@@ -272,29 +277,28 @@ func OpenReader(path string, format DetectedFormat) (r *Reader, retErr error) {
 		}
 	}()
 
-	version := format.version
-	if format.hasHeader {
-		var h [HeaderSize]byte
-		if _, err := f.ReadAt(h[:], 0); err != nil {
-			return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
-		}
-		version, err = headerParse(h[:])
-		if err != nil {
-			return nil, fmt.Errorf("parse log header: %w", err)
-		}
+	var h [HeaderSize]byte
+	if _, err := f.ReadAt(h[:], 0); err != nil {
+		return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
+	}
+	v, err := headerParse(h[:], offset)
+	if err != nil {
+		return nil, fmt.Errorf("parse log header: %w", err)
 	}
 
-	r = &Reader{Path: path, r: f, v: version}
-	switch version {
-	case v0:
-		r.reader = r.readv0
+	r = &Reader{Path: path, r: f, v: v}
+	switch v {
+	case V1:
+		r.reader = r.readV1
+	case V2:
+		r.reader = r.readV2
 	default:
-		r.reader = r.readv1
+		return nil, fmt.Errorf("read log invalid version: %v", v)
 	}
 	return r, nil
 }
 
-func OpenReaderMem(path string, format DetectedFormat) (r *Reader, retErr error) {
+func OpenReaderMem(path string, offset int64) (r *Reader, retErr error) {
 	f, err := mmap.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read mem log open: %w", err)
@@ -305,33 +309,40 @@ func OpenReaderMem(path string, format DetectedFormat) (r *Reader, retErr error)
 		}
 	}()
 
-	version := format.version
-	if format.hasHeader {
-		var h [HeaderSize]byte
-		if _, err := f.ReadAt(h[:], 0); err != nil {
-			return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
-		}
-		version, err = headerParse(h[:])
-		if err != nil {
-			return nil, fmt.Errorf("parse log header: %w", err)
-		}
+	var h [HeaderSize]byte
+	if _, err := f.ReadAt(h[:], 0); err != nil {
+		return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
+	}
+	v, err := headerParse(h[:], offset)
+	if err != nil {
+		return nil, fmt.Errorf("parse log header: %w", err)
 	}
 
-	r = &Reader{Path: path, ra: f, v: version}
-	switch version {
-	case v0:
-		r.reader = r.readv0
+	r = &Reader{Path: path, ra: f, v: v}
+	switch v {
+	case V1:
+		r.reader = r.readV1
+	case V2:
+		r.reader = r.readV2
 	default:
-		r.reader = r.readv1
+		return nil, fmt.Errorf("read log invalid version: %v", v)
 	}
 	return r, nil
 }
 
+func (r *Reader) Version() Version {
+	return r.v
+}
+
 func (r *Reader) InitialPosition() int64 {
-	if r.v == v0 {
+	switch r.v {
+	case V1:
 		return 0
+	case V2:
+		return int64(HeaderSize)
+	default:
+		return -1 // TODO
 	}
-	return int64(HeaderSize)
 }
 
 func (r *Reader) Consume(position, maxPosition int64, maxCount int64) ([]Message, error) {
@@ -361,7 +372,7 @@ func (r *Reader) Read(position int64) (msg Message, nextPosition int64, err erro
 	return
 }
 
-func (r *Reader) readv0(position int64, msg *Message) (nextPosition int64, err error) {
+func (r *Reader) readV1(position int64, msg *Message) (nextPosition int64, err error) {
 	var headerBytes [8 + 8 + 4 + 4 + 4]byte
 	if r.ra != nil {
 		_, err = r.ra.ReadAt(headerBytes[:], position)
@@ -417,7 +428,7 @@ func (r *Reader) readv0(position int64, msg *Message) (nextPosition int64, err e
 	return position, nil
 }
 
-func (r *Reader) readv1(position int64, msg *Message) (nextPosition int64, err error) {
+func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err error) {
 	// Step 1: Read 28-byte header
 	var headerBytes [msgHeaderSize]byte
 	if r.ra != nil {
