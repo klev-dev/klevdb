@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb/message"
 )
 
 func genSegments(offsets ...int64) []Segment {
 	var segments []Segment
 	for _, offset := range offsets {
-		segments = append(segments, New("", offset))
+		segments = append(segments, New("", offset, message.FormatLog))
 	}
 	return segments
 }

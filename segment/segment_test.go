@@ -64,7 +64,7 @@ func TestRecover(t *testing.T) {
 			"MessageMissing",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Log, message.Size(msgs[0]))
+				return os.Truncate(s.Data, message.Size(msgs[0], message.FormatLog))
 			},
 			msgs[0:1],
 		},
@@ -72,7 +72,7 @@ func TestRecover(t *testing.T) {
 			"MessageShortHeader",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Log, message.Size(msgs[0])+4)
+				return os.Truncate(s.Data, message.Size(msgs[0], message.FormatLog)+4)
 			},
 			msgs[0:1],
 		},
@@ -80,7 +80,7 @@ func TestRecover(t *testing.T) {
 			"MessageShortData",
 			msgs,
 			func(s Segment) error {
-				return os.Truncate(s.Log, message.Size(msgs[0])+params.Size()+4)
+				return os.Truncate(s.Data, message.Size(msgs[0], message.FormatLog)+params.Size()+4)
 			},
 			msgs[0:1],
 		},
@@ -88,7 +88,7 @@ func TestRecover(t *testing.T) {
 			"MessageCRC",
 			msgs,
 			func(s Segment) error {
-				return clearLastByte(s.Log)
+				return clearLastByte(s.Data)
 			},
 			msgs[0:1],
 		},
@@ -128,7 +128,7 @@ func TestRecover(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New(t.TempDir(), 0)
+			seg := New(t.TempDir(), 0, message.FormatLog)
 			writeMessages(t, seg, params, test.in)
 
 			require.NoError(t, test.corrupt(seg))
@@ -199,22 +199,114 @@ func TestBackup(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			seg := New(t.TempDir(), 0)
+			seg := New(t.TempDir(), 0, message.FormatLog)
 			writeMessages(t, seg, params, test.in)
 
 			ndir := t.TempDir()
 			require.NoError(t, test.backup(t, seg, ndir))
 
-			nseg := New(ndir, 0)
+			nseg := New(ndir, 0, message.FormatLog)
 			assertMessages(t, nseg, params, test.out)
 		})
 	}
 }
 
-func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []message.Message) {
-	lw, err := message.OpenWriter(seg.Log)
+func TestNeedsReindexHeaderOnly(t *testing.T) {
+	params := index.Params{Times: true, Keys: true}
+	dir := t.TempDir()
+	seg := New(dir, 0, message.FormatSegment)
+
+	// Write just the header to the index (simulates crash after header write, before any items)
+	iw, err := index.OpenWriter(seg.Index, params, index.FormatSegment)
 	require.NoError(t, err)
-	iw, err := index.OpenWriter(seg.Index, params)
+	require.NoError(t, iw.Close())
+
+	reindex, err := seg.NeedsReindex()
+	require.NoError(t, err)
+	require.True(t, reindex, "header-only index should trigger reindex")
+}
+
+func TestNeedsReindexPartialHeader(t *testing.T) {
+	dir := t.TempDir()
+	seg := New(dir, 0, message.FormatSegment)
+
+	// Write a single byte to the index (simulates crash mid-header-write)
+	f, err := os.Create(seg.Index)
+	require.NoError(t, err)
+	_, err = f.Write([]byte{0xFF})
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	reindex, err := seg.NeedsReindex()
+	require.NoError(t, err)
+	require.True(t, reindex, "partial-header index should trigger reindex")
+}
+
+func TestMigrate(t *testing.T) {
+	params := index.Params{Times: true, Keys: true}
+	msgs := []message.Message{
+		{
+			Offset: 0,
+			Time:   time.Date(2022, 04, 03, 14, 58, 0, 0, time.UTC),
+			Key:    []byte("key"),
+			Value:  []byte("value"),
+		},
+		{
+			Offset: 1,
+			Time:   time.Date(2022, 04, 03, 15, 58, 0, 0, time.UTC),
+			Key:    []byte("key1"),
+			Value:  []byte("value1"),
+		},
+	}
+
+	t.Run("Basic", func(t *testing.T) {
+		dir := t.TempDir()
+		oldSeg := New(dir, 0, message.FormatLog)
+		writeMessages(t, oldSeg, params, msgs)
+
+		newSeg, err := oldSeg.Migrate()
+		require.NoError(t, err)
+		require.Equal(t, message.FormatSegment, newSeg.DataFormat)
+
+		// old .log file should be gone
+		_, err = os.Stat(oldSeg.Data)
+		require.ErrorIs(t, err, os.ErrNotExist)
+
+		assertMessages(t, newSeg, params, msgs)
+	})
+
+	t.Run("NoOp", func(t *testing.T) {
+		dir := t.TempDir()
+		seg := New(dir, 0, message.FormatSegment)
+		writeMessages(t, seg, params, msgs)
+
+		result, err := seg.Migrate()
+		require.NoError(t, err)
+		require.Equal(t, seg, result)
+	})
+
+	t.Run("StaleTemp", func(t *testing.T) {
+		dir := t.TempDir()
+		oldSeg := New(dir, 0, message.FormatLog)
+		writeMessages(t, oldSeg, params, msgs)
+
+		// plant a stale .migrate temp file
+		newSeg := New(dir, 0, message.FormatSegment)
+		stale, err := os.Create(newSeg.Data + ".migrate")
+		require.NoError(t, err)
+		require.NoError(t, stale.Close())
+
+		result, err := oldSeg.Migrate()
+		require.NoError(t, err)
+		require.Equal(t, message.FormatSegment, result.DataFormat)
+		assertMessages(t, result, params, msgs)
+	})
+}
+
+func writeMessages(t *testing.T, seg Segment, params index.Params, msgs []message.Message) {
+	lw, err := message.OpenWriter(seg.Data, seg.DataFormat)
+	require.NoError(t, err)
+	iw, err := index.OpenWriter(seg.Index, params, seg.IndexFormat)
 	require.NoError(t, err)
 
 	var indexTime int64
@@ -236,7 +328,7 @@ func assertMessages(t *testing.T, seg Segment, params index.Params, expMsgs []me
 	require.NoError(t, err)
 	require.Len(t, index, len(expMsgs))
 
-	lr, err := message.OpenReader(seg.Log)
+	lr, err := message.OpenReader(seg.Data, seg.DataFormat)
 	require.NoError(t, err)
 
 	for i, expMsg := range expMsgs {

@@ -24,13 +24,17 @@ type writer struct {
 }
 
 func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writer, error) {
-	messages, err := message.OpenWriter(seg.Log)
+	messages, err := message.OpenWriter(seg.Data, seg.DataFormat)
 	if err != nil {
 		return nil, err
 	}
 
 	var ix *writerIndex
-	if messages.Size() > 0 {
+	headerSize := int64(0)
+	if seg.DataFormat == message.FormatSegment {
+		headerSize = message.HeaderSize
+	}
+	if messages.Size() > headerSize {
 		indexItems, err := seg.ReindexAndReadIndex(params)
 		if err != nil {
 			return nil, err
@@ -40,7 +44,7 @@ func openWriter(seg segment.Segment, params index.Params, nextTime int64) (*writ
 		ix = newWriterIndex(nil, params.Keys, seg.Offset, nextTime)
 	}
 
-	items, err := index.OpenWriter(seg.Index, params)
+	items, err := index.OpenWriter(seg.Index, params, seg.IndexFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +70,10 @@ func (w *writer) GetNextOffset() (int64, error) {
 }
 
 func (w *writer) NeedsRollover(rollover int64) bool {
-	return (w.messages.Size() + w.items.Size()) > rollover
+	// Rollover is intentionally based on data-file size only, not including the
+	// index. The index grows proportionally; callers set the threshold based on
+	// message-data volume, not total on-disk cost.
+	return w.messages.Size() > rollover
 }
 
 func (w *writer) Publish(msgs []message.Message) (int64, error) {
@@ -109,7 +116,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 
 	if len(rs.SurviveOffsets)+len(rs.DeletedOffsets) != w.index.Len() {
 		// the number of messages changed, nothing to drop
-		if err := rs.Segment.Remove(); err != nil {
+		if err := rs.Remove(); err != nil {
 			return nil, nil, err
 		}
 		return nil, nil, errSegmentChanged
@@ -120,12 +127,12 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 	}
 
 	if len(rs.SurviveOffsets) == 0 {
-		if err := rs.Segment.Remove(); err != nil {
+		if err := rs.Remove(); err != nil {
 			return nil, nil, err
 		}
 
 		nextOffset, nextTime := w.index.getNext()
-		nseg := segment.New(w.segment.Dir, nextOffset)
+		nseg := segment.New(w.segment.Dir, nextOffset, message.FormatSegment)
 		nwrt, err := openWriter(nseg, w.params, nextTime)
 		if err != nil {
 			return nil, nil, err
@@ -140,20 +147,27 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 
 	nseg := rs.GetNewSegment()
 	if nseg != w.segment {
-		// the starting offset of the new segment is different
-		if err := rs.Segment.Rename(nseg); err != nil {
+		// the new segment occupies a different path (offset changed or format upgraded)
+		if err := rs.Rename(nseg); err != nil {
 			return nil, nil, err
 		}
 
-		if err := w.segment.Remove(); err != nil {
-			return nil, nil, err
+		if w.segment.Index == nseg.Index {
+			// only delete the data part, since the index was already renamed by rs.Rename(nseg)
+			if err := w.segment.RemoveData(); err != nil {
+				return nil, nil, err
+			}
+		} else {
+			if err := w.segment.Remove(); err != nil {
+				return nil, nil, err
+			}
 		}
 
 		// first move the replacement
 		nextOffset, nextTime := w.index.getNext()
 		if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
 			rdr := openReader(nseg, w.params, false)
-			wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params, nextTime)
+			wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset, w.segment.DataFormat), w.params, nextTime)
 			return wrt, rdr, err
 		} else {
 			wrt, err := openWriter(nseg, w.params, nextTime)
@@ -161,14 +175,14 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		}
 	}
 
-	if err := rs.Segment.Override(w.segment); err != nil {
+	if err := rs.Override(w.segment); err != nil {
 		return nil, nil, err
 	}
 
 	nextOffset, nextTime := w.index.getNext()
 	if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
 		rdr := openReader(w.segment, w.params, false)
-		wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset), w.params, nextTime)
+		wrt, err := openWriter(segment.New(w.segment.Dir, nextOffset, w.segment.DataFormat), w.params, nextTime)
 		return wrt, rdr, err
 	} else {
 		wrt, err := openWriter(w.segment, w.params, nextTime)

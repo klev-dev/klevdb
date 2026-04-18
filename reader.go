@@ -56,7 +56,7 @@ func reopenReader(seg segment.Segment, params index.Params, ix indexer) *reader 
 }
 
 func openReaderAppend(seg segment.Segment, params index.Params, ix indexer) (*reader, error) {
-	messages, err := message.OpenReader(seg.Log)
+	messages, err := message.OpenReader(seg.Data, seg.DataFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 
 	if len(rs.SurviveOffsets) == 0 {
 		// nothing left in reader, drop empty files
-		if err := rs.Segment.Remove(); err != nil {
+		if err := rs.Remove(); err != nil {
 			return nil, err
 		}
 
@@ -275,23 +275,30 @@ func (r *reader) Delete(rs *segment.RewriteSegment) (*reader, error) {
 
 	nseg := rs.GetNewSegment()
 	if nseg != r.segment {
-		// the starting offset of the new segment is different
+		// the new segment occupies a different path (offset changed or format upgraded)
 
 		// first move the replacement
-		if err := rs.Segment.Rename(nseg); err != nil {
+		if err := rs.Rename(nseg); err != nil {
 			return nil, err
 		}
 
 		// then delete this segment
-		if err := r.segment.Remove(); err != nil {
-			return nil, err
+		if r.segment.Index == nseg.Index {
+			// only delete the data part, since the index was already renamed by rs.Rename(nseg)
+			if err := r.segment.RemoveData(); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := r.segment.Remove(); err != nil {
+				return nil, err
+			}
 		}
 
 		return &reader{segment: nseg, params: r.params}, nil
 	}
 
 	// the rewritten segment has the same starting offset
-	if err := rs.Segment.Override(r.segment); err != nil {
+	if err := rs.Override(r.segment); err != nil {
 		return nil, err
 	}
 
@@ -349,7 +356,7 @@ func (r *reader) getMessages() (*message.Reader, error) {
 		return msgs, nil
 	}
 
-	msgs, err := message.OpenReaderMem(r.segment.Log)
+	msgs, err := message.OpenReaderMem(r.segment.Data, r.segment.DataFormat)
 	if err != nil {
 		return nil, err
 	}

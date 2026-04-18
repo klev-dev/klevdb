@@ -165,3 +165,10 @@ func Recover(dir string, opts Options) error {
 		Keys:  opts.KeyIndex,
 	})
 }
+
+func Migrate(dir string, opts Options) error {
+	return segment.MigrateDir(dir, index.Params{
+		Times: opts.TimeIndex,
+		Keys:  opts.KeyIndex,
+	})
+}

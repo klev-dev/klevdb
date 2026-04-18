@@ -74,10 +74,10 @@ func Open(dir string, opts Options) (result Log, err error) {
 	if len(segments) == 0 {
 		if opts.Readonly {
 			ix := newReaderIndex(nil, params.Keys, 0, true)
-			rdr := reopenReader(segment.New(dir, 0), params, ix)
+			rdr := reopenReader(segment.New(dir, 0, message.FormatSegment), params, ix)
 			l.readers = []*reader{rdr}
 		} else {
-			w, err := openWriter(segment.New(dir, 0), params, 0)
+			w, err := openWriter(segment.New(dir, 0, message.FormatSegment), params, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -85,13 +85,20 @@ func Open(dir string, opts Options) (result Log, err error) {
 			l.readers = []*reader{w.reader}
 		}
 	} else {
-		head := segments[len(segments)-1]
 		if opts.Check {
+			head := segments[len(segments)-1]
 			if err := head.Check(params); err != nil {
 				return nil, err
 			}
 		}
 
+		if !opts.Readonly {
+			if err := segment.CleanupOrphanLogs(dir); err != nil {
+				return nil, err
+			}
+		}
+
+		head := segments[len(segments)-1]
 		for _, seg := range segments[:len(segments)-1] {
 			rdr := openReader(seg, params, false)
 			l.readers = append(l.readers, rdr)
@@ -143,7 +150,7 @@ func (l *log) Publish(msgs []message.Message) (int64, error) {
 		}
 
 		oldReader, nextOffset, nextTime := l.writer.ReopenReader()
-		newWriter, err := openWriter(segment.New(l.dir, nextOffset), l.params, nextTime)
+		newWriter, err := openWriter(segment.New(l.dir, nextOffset, message.FormatSegment), l.params, nextTime)
 		if err != nil {
 			return OffsetInvalid, err
 		}
@@ -371,7 +378,7 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 
 	if len(rs.DeletedOffsets) == 0 {
 		// deleted nothing, just remove rewrite files
-		return nil, 0, rs.Segment.Remove()
+		return nil, 0, rs.Remove()
 	}
 
 	// check if we are deleting in the writing segment
@@ -404,7 +411,7 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 
 	if wasWriter {
 		// A writing segment transformed into a reader, retry deleting
-		if err := rs.Segment.Remove(); err != nil {
+		if err := rs.Remove(); err != nil {
 			return nil, 0, err
 		}
 		return l.delete(offsets)
@@ -447,8 +454,9 @@ func (l *log) findDeleteReader(offsets map[int64]struct{}) (*reader, error) {
 	return rdr, err
 }
 
+// Size returns the on-disk cost of writing m as a new message (always FormatSegment overhead).
 func (l *log) Size(m message.Message) int64 {
-	return message.Size(m) + l.params.Size()
+	return message.Size(m, message.FormatSegment) + l.params.Size()
 }
 
 func (l *log) Stat() (segment.Stats, error) {

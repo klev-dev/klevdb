@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
 )
@@ -39,7 +40,7 @@ func TestBasic(t *testing.T) {
 	var err error
 	t.Run("Open", func(t *testing.T) {
 		l, err = Open(dir, Options{
-			Rollover: 3 * message.Size(msgs[0]),
+			Rollover: 3 * message.Size(msgs[0], message.FormatSegment),
 		})
 		require.NoError(t, err)
 
@@ -51,7 +52,7 @@ func TestBasic(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, stat.Segments)
 		require.Equal(t, 0, stat.Messages)
-		require.Equal(t, int64(0), stat.Size)
+		require.Equal(t, int64(message.HeaderSize+index.HeaderSize), stat.Size)
 	})
 
 	var coff int64
@@ -110,7 +111,7 @@ func TestBasic(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, stat.Segments)
 		require.Equal(t, 3, stat.Messages)
-		require.Equal(t, 3*l.Size(msgs[0]), stat.Size)
+		require.Equal(t, 3*l.Size(msgs[0])+message.HeaderSize+index.HeaderSize, stat.Size)
 	})
 
 	t.Run("Relative", func(t *testing.T) {
@@ -160,7 +161,7 @@ func TestBasic(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, stat.Segments)
 		require.Equal(t, 6, stat.Messages)
-		require.Equal(t, 6*l.Size(msgs[0]), stat.Size)
+		require.Equal(t, 6*l.Size(msgs[0])+2*(message.HeaderSize+index.HeaderSize), stat.Size)
 	})
 
 	t.Run("RolloverRelative", func(t *testing.T) {
@@ -217,7 +218,7 @@ func TestGet(t *testing.T) {
 	msgs := message.Gen(4)
 
 	l, err := Open(t.TempDir(), Options{
-		Rollover: 2 * message.Size(msgs[0]),
+		Rollover: 2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -296,7 +297,7 @@ func TestByKey(t *testing.T) {
 	msgs := message.Gen(4)
 	l, err := Open(t.TempDir(), Options{
 		KeyIndex: true,
-		Rollover: 2 * message.Size(msgs[0]),
+		Rollover: 2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -417,7 +418,7 @@ func TestByTime(t *testing.T) {
 	msgs := message.Gen(4)
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -557,7 +558,7 @@ func testReopenSegments(t *testing.T) {
 	l, err := Open(dir, Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 
@@ -762,7 +763,7 @@ func testReadonlySegment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, stat.Segments)
 	require.Equal(t, 4, stat.Messages)
-	require.Equal(t, 4*l.Size(msgs[0]), stat.Size)
+	require.Equal(t, 4*l.Size(msgs[0])+message.HeaderSize+index.HeaderSize, stat.Size)
 
 	bdir := t.TempDir()
 	err = l.Backup(bdir)
@@ -787,7 +788,7 @@ func testReadonlySegments(t *testing.T) {
 	l, err := Open(dir, Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 
@@ -870,7 +871,7 @@ func testReadonlySegments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, stat.Segments)
 	require.Equal(t, 4, stat.Messages)
-	require.Equal(t, 4*l.Size(msgs[0]), stat.Size)
+	require.Equal(t, 4*l.Size(msgs[0])+2*(message.HeaderSize+index.HeaderSize), stat.Size)
 
 	bdir := t.TempDir()
 	err = l.Backup(bdir)
@@ -914,7 +915,7 @@ func testStatSegment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, stats.Segments)
 	require.Equal(t, len(msgs), stats.Messages)
-	require.Equal(t, sz, stats.Size)
+	require.Equal(t, sz+int64(message.HeaderSize+index.HeaderSize)*int64(stats.Segments), stats.Size)
 }
 
 func testStatSegments(t *testing.T) {
@@ -923,7 +924,7 @@ func testStatSegments(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -939,7 +940,7 @@ func testStatSegments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, stats.Segments)
 	require.Equal(t, len(msgs), stats.Messages)
-	require.Equal(t, sz, stats.Size)
+	require.Equal(t, sz+int64(message.HeaderSize+index.HeaderSize)*int64(stats.Segments), stats.Size)
 }
 
 func TestBackup(t *testing.T) {
@@ -992,7 +993,7 @@ func testBackupSegments(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1037,7 +1038,7 @@ func TestReindex(t *testing.T) {
 	l, err := Open(dir, Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 
@@ -1058,7 +1059,7 @@ func TestReindex(t *testing.T) {
 	l, err = Open(dir, Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	})
 	require.NoError(t, err)
 
@@ -1082,7 +1083,7 @@ func TestCorruptReopen(t *testing.T) {
 	logOpts := Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * message.Size(msgs[0]),
+		Rollover:  2 * message.Size(msgs[0], message.FormatSegment),
 	}
 
 	dir := t.TempDir()
@@ -1142,7 +1143,7 @@ func testDeleteReaderPartial(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1186,7 +1187,7 @@ func testDeleteReaderPartialReload(t *testing.T) {
 	l, err := Open(dir, Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	publishBatched(t, l, msgs, 1)
@@ -1197,7 +1198,7 @@ func testDeleteReaderPartialReload(t *testing.T) {
 	l, err = Open(dir, Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1238,7 +1239,7 @@ func testDeleteReaderFull(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1277,7 +1278,7 @@ func testDeleteWriterSingle(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  4 * (message.Size(msgs[0]) - 1),
+		Rollover:  4 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1365,7 +1366,7 @@ func testDeleteWriterPartial(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1410,7 +1411,7 @@ func testDeleteWriterFull(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1463,7 +1464,7 @@ func testDeleteAll(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
@@ -1759,7 +1760,7 @@ func testConcurrentGC(t *testing.T) {
 	dir := t.TempDir()
 
 	msgs := message.Gen(100)
-	msgSize := message.Size(msgs[0])
+	msgSize := message.Size(msgs[0], message.FormatSegment)
 
 	l, err := Open(dir, Options{
 		Rollover: msgSize * 10,
@@ -1797,4 +1798,53 @@ func testConcurrentGC(t *testing.T) {
 	})
 
 	require.NoError(t, g.Wait())
+}
+
+func TestMigrateAPI(t *testing.T) {
+	opts := Options{TimeIndex: true, KeyIndex: true}
+	params := index.Params{Times: opts.TimeIndex, Keys: opts.KeyIndex}
+	msgs := message.Gen(4)
+
+	dir := t.TempDir()
+
+	// Write a FormatLog (v0) segment directly, bypassing Open() which always
+	// creates FormatSegment. Simulates a database created by an older release.
+	seg := segment.New(dir, 0, message.FormatLog)
+	lw, err := message.OpenWriter(seg.Data, seg.DataFormat)
+	require.NoError(t, err)
+	iw, err := index.OpenWriter(seg.Index, params, seg.IndexFormat)
+	require.NoError(t, err)
+	var indexTime int64
+	for _, m := range msgs {
+		pos, err := lw.Write(m)
+		require.NoError(t, err)
+		item := params.NewItem(m, pos, indexTime)
+		require.NoError(t, iw.Write(item))
+		indexTime = item.Timestamp
+	}
+	require.NoError(t, lw.SyncAndClose())
+	require.NoError(t, iw.SyncAndClose())
+
+	// Run the public API migration.
+	require.NoError(t, Migrate(dir, opts))
+
+	// Old .log file must be gone; new .segment file must exist.
+	_, err = os.Stat(seg.Data)
+	require.ErrorIs(t, err, os.ErrNotExist, ".log should be removed by Migrate")
+	newSeg := segment.New(dir, 0, message.FormatSegment)
+	_, err = os.Stat(newSeg.Data)
+	require.NoError(t, err, ".segment should exist after Migrate")
+
+	// Reopen through the public API and verify all messages are still readable.
+	l, err := Open(dir, opts)
+	require.NoError(t, err)
+	defer l.Close()
+
+	_, consumed, err := l.Consume(OffsetOldest, int64(len(msgs)))
+	require.NoError(t, err)
+	require.Len(t, consumed, len(msgs))
+	for i, expected := range msgs {
+		require.Equal(t, expected.Key, consumed[i].Key)
+		require.Equal(t, expected.Value, consumed[i].Value)
+	}
 }

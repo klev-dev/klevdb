@@ -15,7 +15,7 @@ func TestDeleteMulti(t *testing.T) {
 	l, err := Open(t.TempDir(), Options{
 		TimeIndex: true,
 		KeyIndex:  true,
-		Rollover:  2 * (message.Size(msgs[0]) - 1),
+		Rollover:  2 * (message.Size(msgs[0], message.FormatSegment) - 1),
 	})
 	require.NoError(t, err)
 	defer l.Close()
