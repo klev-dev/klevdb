@@ -23,7 +23,7 @@ type Version struct {
 
 var (
 	VUnknown         = Version{invalid: true}
-	V1               = Version{marker: 0}
+	V1               = Version{marker: 255}
 	V2               = Version{marker: 1}
 	VLast    Version = V2 // always last version
 )

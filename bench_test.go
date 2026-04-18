@@ -36,15 +36,21 @@ func MkdirBench(b *testing.B) string {
 	return dir
 }
 
+var v1opts = VersionOptions{NewSegmentsVersion: V1}
+
 func benchmarkPublish(b *testing.B) {
 	var cases = []struct {
 		name string
 		opts Options
 	}{
-		{"No", Options{}},
-		{"Times", Options{TimeIndex: true}},
-		{"Keys", Options{KeyIndex: true}},
-		{"All", Options{TimeIndex: true, KeyIndex: true}},
+		{"NoV1", Options{Version: v1opts}},
+		{"NoV2", Options{}},
+		{"TimesV1", Options{TimeIndex: true, Version: v1opts}},
+		{"TimesV2", Options{TimeIndex: true}},
+		{"KeysV1", Options{KeyIndex: true, Version: v1opts}},
+		{"KeysV2", Options{KeyIndex: true}},
+		{"AllV1", Options{TimeIndex: true, KeyIndex: true, Version: v1opts}},
+		{"AllV2", Options{TimeIndex: true, KeyIndex: true}},
 	}
 	for _, bn := range []int{1, 8} {
 		for _, c := range cases {
@@ -121,10 +127,14 @@ func benchmarkConsume(b *testing.B) {
 		name string
 		opts Options
 	}{
-		{"No", Options{}},
-		{"Times", Options{TimeIndex: true}},
-		{"Keys", Options{KeyIndex: true}},
-		{"All", Options{TimeIndex: true, KeyIndex: true}},
+		{"NoV1", Options{Version: v1opts}},
+		{"NoV2", Options{}},
+		{"TimesV1", Options{TimeIndex: true, Version: v1opts}},
+		{"TimesV2", Options{TimeIndex: true}},
+		{"KeysV1", Options{KeyIndex: true, Version: v1opts}},
+		{"KeysV2", Options{KeyIndex: true}},
+		{"AllV1", Options{TimeIndex: true, KeyIndex: true, Version: v1opts}},
+		{"AllV2", Options{TimeIndex: true, KeyIndex: true}},
 	}
 	for _, bn := range []int{1, 8} {
 		for _, c := range cases {

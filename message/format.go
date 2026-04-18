@@ -35,7 +35,7 @@ type Version struct {
 
 var (
 	VUnknown         = Version{invalid: true}
-	V1               = Version{marker: 0}
+	V1               = Version{marker: 255}
 	V2               = Version{marker: 1}
 	VLast    Version = V2 // always last version
 )
@@ -278,12 +278,18 @@ func OpenReader(path string, offset int64) (r *Reader, retErr error) {
 	}()
 
 	var h [HeaderSize]byte
-	if _, err := f.ReadAt(h[:], 0); err != nil {
-		return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
-	}
-	v, err := headerParse(h[:], offset)
-	if err != nil {
-		return nil, fmt.Errorf("parse log header: %w", err)
+	var v Version
+	if n, err := f.ReadAt(h[:], 0); err != nil {
+		if !errors.Is(err, io.EOF) || n != 0 {
+			return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
+		}
+		v = V1 // empty file: V1 has no file header
+	} else {
+		var err error
+		v, err = headerParse(h[:], offset)
+		if err != nil {
+			return nil, fmt.Errorf("parse log header: %w", err)
+		}
 	}
 
 	r = &Reader{Path: path, r: f, v: v}
@@ -310,12 +316,18 @@ func OpenReaderMem(path string, offset int64) (r *Reader, retErr error) {
 	}()
 
 	var h [HeaderSize]byte
-	if _, err := f.ReadAt(h[:], 0); err != nil {
-		return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
-	}
-	v, err := headerParse(h[:], offset)
-	if err != nil {
-		return nil, fmt.Errorf("parse log header: %w", err)
+	var v Version
+	if n, err := f.ReadAt(h[:], 0); err != nil {
+		if !errors.Is(err, io.EOF) || n != 0 {
+			return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
+		}
+		v = V1 // empty file: V1 has no file header
+	} else {
+		var err error
+		v, err = headerParse(h[:], offset)
+		if err != nil {
+			return nil, fmt.Errorf("parse log header: %w", err)
+		}
 	}
 
 	r = &Reader{Path: path, ra: f, v: v}
@@ -461,13 +473,17 @@ func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err e
 		return -1, errInvalidHeader
 	}
 
-	// Step 4: Read key + value + trailer
-	dataSize := int(keySize) + int(valueSize) + trailerSize
-	dataBytes := make([]byte, dataSize)
+	// Step 4: Allocate payload = headerBytes[4:] (24 bytes) ++ key ++ value ++ trailer.
+	// Combining them avoids passing a stack-allocated slice to crc32, which would
+	// cause headerBytes to escape to the heap and add an extra allocation per read.
+	const headerPayloadSize = msgHeaderSize - 4 // 24: TotalLen+Offset+UnixMicro+ValueLen
+	payloadSize := headerPayloadSize + int(keySize) + int(valueSize) + trailerSize
+	payload := make([]byte, payloadSize)
+	copy(payload[:headerPayloadSize], headerBytes[4:])
 	if r.ra != nil {
-		_, err = r.ra.ReadAt(dataBytes, position+msgHeaderSize)
+		_, err = r.ra.ReadAt(payload[headerPayloadSize:], position+msgHeaderSize)
 	} else {
-		_, err = r.r.ReadAt(dataBytes, position+msgHeaderSize)
+		_, err = r.r.ReadAt(payload[headerPayloadSize:], position+msgHeaderSize)
 	}
 	switch {
 	case err == nil:
@@ -480,28 +496,27 @@ func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err e
 		return -1, fmt.Errorf("read data: %w", err)
 	}
 
-	// Step 5: Verify CRC (chains header[4:] and dataBytes)
-	partialCRC := crc32.Checksum(headerBytes[4:], crc32cTable)
-	actualCRC := crc32.Update(partialCRC, crc32cTable, dataBytes)
+	// Step 5: Verify CRC over the combined payload (already heap-allocated, no escape)
+	actualCRC := crc32.Checksum(payload, crc32cTable)
 	if expectedCRC != actualCRC {
 		return -1, errCrcFailed
 	}
 
 	// Step 6: Verify trailer
-	trailerOff := int(keySize) + int(valueSize)
-	if binary.BigEndian.Uint64(dataBytes[trailerOff:]) != trailerMagic {
+	trailerOff := headerPayloadSize + int(keySize) + int(valueSize)
+	if binary.BigEndian.Uint64(payload[trailerOff:]) != trailerMagic {
 		return -1, errBadTrailer
 	}
 
 	// Step 7: Assign key/value
 	if keySize > 0 {
-		msg.Key = dataBytes[:keySize]
+		msg.Key = payload[headerPayloadSize : headerPayloadSize+int(keySize)]
 	}
 	if valueSize > 0 {
-		msg.Value = dataBytes[keySize : keySize+valueSize]
+		msg.Value = payload[headerPayloadSize+int(keySize) : headerPayloadSize+int(keySize)+int(valueSize)]
 	}
 
-	return position + int64(msgHeaderSize) + int64(dataSize), nil
+	return position + int64(msgHeaderSize) + int64(int(keySize)+int(valueSize)+trailerSize), nil
 }
 
 func (r *Reader) Close() error {
