@@ -12,17 +12,30 @@ import (
 	"github.com/klev-dev/klevdb/message"
 )
 
+var v1opts = VersionOptions{NewSegmentsVersion: V1}
+var v2opts = VersionOptions{}
+
 func BenchmarkSingle(b *testing.B) {
-	b.Run("Publish", benchmarkPublish)
-	b.Run("Consume", benchmarkConsume)
-	b.Run("Get", benchmarkGet)
+	b.Run("V1", func(b *testing.B) { benchmarkSingle(b, v1opts) })
+	b.Run("V2", func(b *testing.B) { benchmarkSingle(b, v2opts) })
+}
+
+func benchmarkSingle(b *testing.B, version VersionOptions) {
+	b.Run("Publish", func(b *testing.B) { benchmarkPublish(b, version) })
+	b.Run("Consume", func(b *testing.B) { benchmarkConsume(b, version) })
+	b.Run("Get", func(b *testing.B) { benchmarkGet(b, version) })
 }
 
 func BenchmarkMulti(b *testing.B) {
-	b.Run("Base", benchmarkBaseMulti)
-	b.Run("Publish", benchmarkPublishMulti)
-	b.Run("Consume", benchmarkConsumeMulti)
-	b.Run("GetKey", benchmarkGetKeyMulti)
+	b.Run("V1", func(b *testing.B) { benchmarkMulti(b, v1opts) })
+	b.Run("V2", func(b *testing.B) { benchmarkMulti(b, v2opts) })
+}
+
+func benchmarkMulti(b *testing.B, version VersionOptions) {
+	b.Run("Base", func(b *testing.B) { benchmarkBaseMulti(b, version) })
+	b.Run("Publish", func(b *testing.B) { benchmarkPublishMulti(b, version) })
+	b.Run("Consume", func(b *testing.B) { benchmarkConsumeMulti(b, version) })
+	b.Run("GetKey", func(b *testing.B) { benchmarkGetKeyMulti(b, version) })
 }
 
 func MkdirBench(b *testing.B) string {
@@ -36,21 +49,15 @@ func MkdirBench(b *testing.B) string {
 	return dir
 }
 
-var v1opts = VersionOptions{NewSegmentsVersion: V1}
-
-func benchmarkPublish(b *testing.B) {
+func benchmarkPublish(b *testing.B, version VersionOptions) {
 	var cases = []struct {
 		name string
 		opts Options
 	}{
-		{"NoV1", Options{Version: v1opts}},
-		{"NoV2", Options{}},
-		{"TimesV1", Options{TimeIndex: true, Version: v1opts}},
-		{"TimesV2", Options{TimeIndex: true}},
-		{"KeysV1", Options{KeyIndex: true, Version: v1opts}},
-		{"KeysV2", Options{KeyIndex: true}},
-		{"AllV1", Options{TimeIndex: true, KeyIndex: true, Version: v1opts}},
-		{"AllV2", Options{TimeIndex: true, KeyIndex: true}},
+		{"No", Options{Version: version}},
+		{"Times", Options{TimeIndex: true, Version: version}},
+		{"Keys", Options{KeyIndex: true, Version: version}},
+		{"All", Options{TimeIndex: true, KeyIndex: true, Version: version}},
 	}
 	for _, bn := range []int{1, 8} {
 		for _, c := range cases {
@@ -81,11 +88,11 @@ func benchmarkPublish(b *testing.B) {
 	}
 }
 
-func benchmarkPublishMulti(b *testing.B) {
+func benchmarkPublishMulti(b *testing.B, version VersionOptions) {
 	dir := MkdirBench(b)
 	defer os.RemoveAll(dir)
 
-	s, err := Open(dir, Options{TimeIndex: true, KeyIndex: true})
+	s, err := Open(dir, Options{TimeIndex: true, KeyIndex: true, Version: version})
 	require.NoError(b, err)
 	defer s.Close()
 
@@ -122,19 +129,15 @@ func fillLog(b *testing.B, l Log) []Message {
 	return msgs
 }
 
-func benchmarkConsume(b *testing.B) {
+func benchmarkConsume(b *testing.B, version VersionOptions) {
 	var cases = []struct {
 		name string
 		opts Options
 	}{
-		{"NoV1", Options{Version: v1opts}},
-		{"NoV2", Options{}},
-		{"TimesV1", Options{TimeIndex: true, Version: v1opts}},
-		{"TimesV2", Options{TimeIndex: true}},
-		{"KeysV1", Options{KeyIndex: true, Version: v1opts}},
-		{"KeysV2", Options{KeyIndex: true}},
-		{"AllV1", Options{TimeIndex: true, KeyIndex: true, Version: v1opts}},
-		{"AllV2", Options{TimeIndex: true, KeyIndex: true}},
+		{"No", Options{Version: version}},
+		{"Times", Options{TimeIndex: true, Version: version}},
+		{"Keys", Options{KeyIndex: true, Version: version}},
+		{"All", Options{TimeIndex: true, KeyIndex: true, Version: version}},
 	}
 	for _, bn := range []int{1, 8} {
 		for _, c := range cases {
@@ -219,11 +222,11 @@ func benchmarkConsume(b *testing.B) {
 	}
 }
 
-func benchmarkConsumeMulti(b *testing.B) {
+func benchmarkConsumeMulti(b *testing.B, version VersionOptions) {
 	dir := MkdirBench(b)
 	defer os.RemoveAll(dir)
 
-	s, err := Open(dir, Options{KeyIndex: true})
+	s, err := Open(dir, Options{KeyIndex: true, Version: version})
 	require.NoError(b, err)
 	defer s.Close()
 
@@ -253,12 +256,12 @@ func benchmarkConsumeMulti(b *testing.B) {
 	b.StopTimer()
 }
 
-func benchmarkGet(b *testing.B) {
+func benchmarkGet(b *testing.B, version VersionOptions) {
 	b.Run("ByOffset", func(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
-		l, err := Open(dir, Options{})
+		l, err := Open(dir, Options{Version: version})
 		require.NoError(b, err)
 		defer l.Close()
 
@@ -280,7 +283,7 @@ func benchmarkGet(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
-		l, err := Open(dir, Options{KeyIndex: true})
+		l, err := Open(dir, Options{KeyIndex: true, Version: version})
 		require.NoError(b, err)
 		defer l.Close()
 
@@ -302,7 +305,7 @@ func benchmarkGet(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
-		l, err := Open(dir, Options{KeyIndex: true})
+		l, err := Open(dir, Options{KeyIndex: true, Version: version})
 		require.NoError(b, err)
 		defer l.Close()
 
@@ -312,7 +315,7 @@ func benchmarkGet(b *testing.B) {
 		b.SetBytes(l.Size(msgs[0]))
 		b.ResetTimer()
 
-		l, err = Open(dir, Options{KeyIndex: true, Readonly: true})
+		l, err = Open(dir, Options{KeyIndex: true, Readonly: true, Version: version})
 		require.NoError(b, err)
 		defer l.Close()
 
@@ -329,7 +332,7 @@ func benchmarkGet(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
-		l, err := Open(dir, Options{TimeIndex: true})
+		l, err := Open(dir, Options{TimeIndex: true, Version: version})
 		require.NoError(b, err)
 		defer l.Close()
 
@@ -351,7 +354,7 @@ func benchmarkGet(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
-		l, err := Open(dir, Options{TimeIndex: true})
+		l, err := Open(dir, Options{TimeIndex: true, Version: version})
 		require.NoError(b, err)
 		defer l.Close()
 
@@ -361,7 +364,7 @@ func benchmarkGet(b *testing.B) {
 		b.SetBytes(l.Size(msgs[0]))
 		b.ResetTimer()
 
-		l, err = Open(dir, Options{TimeIndex: true, Readonly: true})
+		l, err = Open(dir, Options{TimeIndex: true, Readonly: true, Version: version})
 		require.NoError(b, err)
 		defer l.Close()
 
@@ -375,11 +378,11 @@ func benchmarkGet(b *testing.B) {
 	})
 }
 
-func benchmarkGetKeyMulti(b *testing.B) {
+func benchmarkGetKeyMulti(b *testing.B, version VersionOptions) {
 	dir := MkdirBench(b)
 	defer os.RemoveAll(dir)
 
-	s, err := Open(dir, Options{KeyIndex: true, TimeIndex: true})
+	s, err := Open(dir, Options{KeyIndex: true, TimeIndex: true, Version: version})
 	require.NoError(b, err)
 	defer s.Close()
 
@@ -410,11 +413,11 @@ func benchmarkGetKeyMulti(b *testing.B) {
 	b.StopTimer()
 }
 
-func benchmarkBaseMulti(b *testing.B) {
+func benchmarkBaseMulti(b *testing.B, version VersionOptions) {
 	dir := MkdirBench(b)
 	defer os.RemoveAll(dir)
 
-	s, err := Open(dir, Options{KeyIndex: true, TimeIndex: true})
+	s, err := Open(dir, Options{KeyIndex: true, TimeIndex: true, Version: version})
 	require.NoError(b, err)
 	defer s.Close()
 

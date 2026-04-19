@@ -16,14 +16,6 @@ type Params struct {
 	Keys  bool
 }
 
-func (o Params) keyOffset() int {
-	off := 8 + 8 // offset + position
-	if o.Times {
-		off += 8
-	}
-	return off
-}
-
 func (o Params) Size() int64 {
 	sz := int64(8 + 8) // offset + position
 	if o.Times {
