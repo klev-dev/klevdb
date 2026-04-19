@@ -376,7 +376,25 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	}
 	l.writerMu.Unlock()
 
-	rs, err := rdr.segment.Rewrite(offsets, l.params, l.opts.Version.NewSegmentsVersion.messages, l.opts.Version.NewSegmentsVersion.index)
+	mversion := l.opts.Version.NewSegmentsVersion.messages
+	iversion := l.opts.Version.NewSegmentsVersion.index
+	if l.opts.Version.KeepRewriteVersion {
+		mr, err := message.OpenReader(rdr.segment.Log, rdr.segment.Offset)
+		if err != nil {
+			return nil, 0, err
+		}
+		detected := mr.Version()
+		if err := mr.Close(); err != nil {
+			return nil, 0, err
+		}
+		switch detected {
+		case message.V1:
+			mversion, iversion = message.V1, index.V1
+		case message.V2:
+			mversion, iversion = message.V2, index.V2
+		}
+	}
+	rs, err := rdr.segment.Rewrite(offsets, l.params, mversion, iversion)
 	if err != nil {
 		return nil, 0, err
 	}

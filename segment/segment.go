@@ -493,6 +493,9 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, 
 		return nil, err
 	}
 
+	if len(dst.SurviveOffsets) > 0 {
+		dst.Segment.Offset = message.MinOffset(dst.SurviveOffsets)
+	}
 	dst.Stats, err = dst.Stat(params)
 	if err != nil {
 		return nil, err

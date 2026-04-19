@@ -1830,6 +1830,247 @@ func testConcurrentGC(t *testing.T) {
 	require.NoError(t, g.Wait())
 }
 
+// segmentLogVersions returns the message.Version of every on-disk segment, in offset order.
+func segmentLogVersions(t *testing.T, dir string) []message.Version {
+	t.Helper()
+	segs, err := segment.Find(dir, false)
+	require.NoError(t, err)
+	var versions []message.Version
+	for _, seg := range segs {
+		r, err := message.OpenReader(seg.Log, seg.Offset)
+		require.NoError(t, err)
+		versions = append(versions, r.Version())
+		require.NoError(t, r.Close())
+	}
+	return versions
+}
+
+// consumeAll drains all messages from l across all segments.
+func consumeAll(t *testing.T, l Log) []Message {
+	t.Helper()
+	var all []Message
+	offset := int64(OffsetOldest)
+	for {
+		next, msgs, err := l.Consume(offset, 32)
+		require.NoError(t, err)
+		all = append(all, msgs...)
+		if next == offset {
+			break
+		}
+		offset = next
+	}
+	return all
+}
+
+func TestVersionOptions(t *testing.T) {
+	t.Run("V1Constant", testVersionV1Constant)
+	t.Run("NewSegmentsV2Only", testVersionNewSegmentsV2Only)
+	t.Run("RewriteToV2", testVersionRewriteToV2)
+	t.Run("EagerMigrate", testVersionEagerMigrate)
+	t.Run("Downgrade", testVersionDowngrade)
+}
+
+// testVersionV1Constant verifies that a log opened with NewSegmentsVersion=V1 writes
+// every segment (including rewrites during delete) in V1 format.
+func testVersionV1Constant(t *testing.T) {
+	msgs := message.Gen(4)
+	dir := t.TempDir()
+
+	// Rollover at 2 × V1 message size: msgs 0,1,2 land in seg0; msg3 rolls to seg1.
+	v1opts := Options{
+		Rollover: 2 * message.Size(msgs[0], message.V1),
+		Version:  VersionOptions{NewSegmentsVersion: V1},
+	}
+
+	l, err := Open(dir, v1opts)
+	require.NoError(t, err)
+	publishBatched(t, l, msgs, 1)
+
+	require.Equal(t, []message.Version{message.V1, message.V1}, segmentLogVersions(t, dir))
+
+	// Delete msgs[0] (the first message in seg0). The segment is renamed to start
+	// at msgs[1].Offset after rewrite; V1 detection uses the new base offset.
+	_, _, err = l.Delete(map[int64]struct{}{msgs[0].Offset: {}})
+	require.NoError(t, err)
+
+	require.NoError(t, l.Close())
+
+	// Rewritten seg0 must still be V1.
+	require.Equal(t, []message.Version{message.V1, message.V1}, segmentLogVersions(t, dir))
+
+	l, err = Open(dir, v1opts)
+	require.NoError(t, err)
+	defer l.Close()
+
+	// msgs[1], msgs[2], msgs[3] survive.
+	require.Equal(t, []Message{msgs[1], msgs[2], msgs[3]}, consumeAll(t, l))
+}
+
+// testVersionNewSegmentsV2Only verifies that when KeepRewriteVersion=true, only segments
+// created fresh (on rollover) adopt V2, while rewrites during delete keep the original V1.
+func testVersionNewSegmentsV2Only(t *testing.T) {
+	msgs := message.Gen(4)
+	dir := t.TempDir()
+
+	// Phase 1: write a V1 segment with msgs 0 and 1.
+	rollover := 2 * message.Size(msgs[0], message.V1) // 332 bytes
+	l, err := Open(dir, Options{
+		Rollover: rollover,
+		Version:  VersionOptions{NewSegmentsVersion: V1},
+	})
+	require.NoError(t, err)
+	publishBatched(t, l, msgs[:2], 1)
+	require.NoError(t, l.Close())
+
+	require.Equal(t, []message.Version{message.V1}, segmentLogVersions(t, dir))
+
+	// Phase 2: reopen with V2 for new segments, KeepRewriteVersion=true so rewrites stay V1.
+	// message.OpenWriter and index.OpenWriter detect the existing V1 format and continue
+	// appending in V1 until rollover. The rollover-created segment uses V2.
+	l, err = Open(dir, Options{
+		Rollover: rollover,
+		Version: VersionOptions{
+			NewSegmentsVersion: V2,
+			KeepRewriteVersion: true,
+		},
+	})
+	require.NoError(t, err)
+	defer l.Close()
+
+	// msgs[2] appended to existing V1 seg0 (no rollover yet); msgs[3] triggers rollover
+	// and lands in a new V2 seg1.
+	publishBatched(t, l, msgs[2:], 1)
+	require.Equal(t, []message.Version{message.V1, message.V2}, segmentLogVersions(t, dir))
+
+	// Delete msgs[1] from seg0 (V1 reader). With KeepRewriteVersion=true the rewrite stays V1.
+	_, _, err = l.Delete(map[int64]struct{}{msgs[1].Offset: {}})
+	require.NoError(t, err)
+
+	// seg0 rewritten: V1 with msgs[0], msgs[2]. seg1 unchanged: V2 with msgs[3].
+	require.Equal(t, []message.Version{message.V1, message.V2}, segmentLogVersions(t, dir))
+
+	require.Equal(t, []Message{msgs[0], msgs[2], msgs[3]}, consumeAll(t, l))
+}
+
+// testVersionRewriteToV2 verifies that with KeepRewriteVersion=false (default), both
+// newly rolled-over segments and segments rewritten during delete become V2.
+func testVersionRewriteToV2(t *testing.T) {
+	msgs := message.Gen(4)
+	dir := t.TempDir()
+
+	// Phase 1: write V1 segments with msgs 0 and 1.
+	rollover := 2 * message.Size(msgs[0], message.V1)
+	l, err := Open(dir, Options{
+		Rollover: rollover,
+		Version:  VersionOptions{NewSegmentsVersion: V1},
+	})
+	require.NoError(t, err)
+	publishBatched(t, l, msgs[:2], 1)
+	require.NoError(t, l.Close())
+
+	// Phase 2: reopen with V2 and KeepRewriteVersion=false (the default).
+	l, err = Open(dir, Options{
+		Rollover: rollover,
+		Version:  VersionOptions{NewSegmentsVersion: V2},
+	})
+	require.NoError(t, err)
+	defer l.Close()
+
+	// msgs[2] goes to V1 seg0 (no rollover yet); msgs[3] triggers rollover → V2 seg1.
+	publishBatched(t, l, msgs[2:], 1)
+
+	// Delete msgs[0] from seg0. KeepRewriteVersion=false → rewrite uses V2.
+	_, _, err = l.Delete(map[int64]struct{}{msgs[0].Offset: {}})
+	require.NoError(t, err)
+
+	// Both segments must now be V2.
+	require.Equal(t, []message.Version{message.V2, message.V2}, segmentLogVersions(t, dir))
+
+	require.Equal(t, []Message{msgs[1], msgs[2], msgs[3]}, consumeAll(t, l))
+}
+
+// testVersionEagerMigrate verifies that EagerVersionMigrate=true migrates all existing
+// segments to V2 during Open, before any reads or writes happen.
+func testVersionEagerMigrate(t *testing.T) {
+	msgs := message.Gen(4)
+	dir := t.TempDir()
+
+	// Phase 1: create two V1 segments. No index options so Phase 2 can reopen cleanly.
+	rollover := 2 * message.Size(msgs[0], message.V1)
+	l, err := Open(dir, Options{
+		Rollover: rollover,
+		Version:  VersionOptions{NewSegmentsVersion: V1},
+	})
+	require.NoError(t, err)
+	publishBatched(t, l, msgs, 1)
+	require.NoError(t, l.Close())
+
+	require.Equal(t, []message.Version{message.V1, message.V1}, segmentLogVersions(t, dir))
+
+	// Phase 2: reopen with EagerVersionMigrate. Migrate rebuilds the index from messages,
+	// so we keep the same (no) index options to stay consistent with Phase 1.
+	l, err = Open(dir, Options{
+		Rollover: rollover,
+		Version: VersionOptions{
+			NewSegmentsVersion:  V2,
+			EagerVersionMigrate: true,
+		},
+	})
+	require.NoError(t, err)
+	defer l.Close()
+
+	// All segments upgraded to V2 at Open time.
+	require.Equal(t, []message.Version{message.V2, message.V2}, segmentLogVersions(t, dir))
+
+	// All messages still readable.
+	require.Equal(t, msgs, consumeAll(t, l))
+}
+
+// testVersionDowngrade verifies that switching NewSegmentsVersion to V1 on a V2 store causes
+// only rollover-created segments to use V1 (the existing head segment continues in V2
+// because message.OpenWriter detects the existing format). Rewrites during delete adopt V1
+// when KeepRewriteVersion=false.
+func testVersionDowngrade(t *testing.T) {
+	msgs := message.Gen(4)
+	dir := t.TempDir()
+
+	// Phase 1: create one V2 segment. Rollover is large so Phase 1 never rolls over.
+	// No index options — keep consistent with Phase 2 to avoid V2 header option mismatch.
+	v2msgSize := message.Size(msgs[0], message.V2)
+	l, err := Open(dir, Options{
+		Rollover: 4 * v2msgSize,
+	})
+	require.NoError(t, err)
+	publishBatched(t, l, msgs[:2], 1)
+	require.NoError(t, l.Close())
+
+	require.Equal(t, []message.Version{message.V2}, segmentLogVersions(t, dir))
+
+	// Phase 2: reopen with V1 as the version for new segments.
+	// Use a rollover smaller than the existing seg0 size (8 + 2×V2size) so that the first
+	// publish in Phase 2 triggers a rollover, creating a fresh V1 segment.
+	l, err = Open(dir, Options{
+		Rollover: 2 * v2msgSize,
+		Version:  VersionOptions{NewSegmentsVersion: V1},
+	})
+	require.NoError(t, err)
+	defer l.Close()
+
+	// First publish triggers rollover (seg0 is already larger than Rollover).
+	// msgs[2] and msgs[3] land in the new V1 seg1.
+	publishBatched(t, l, msgs[2:], 1)
+	require.Equal(t, []message.Version{message.V2, message.V1}, segmentLogVersions(t, dir))
+
+	// Delete msgs[1] from V2 seg0. KeepRewriteVersion=false → rewrite uses V1.
+	// msgs[0] stays as the first item (offset 0 == seg0's base offset 0) so V1 detection works.
+	_, _, err = l.Delete(map[int64]struct{}{msgs[1].Offset: {}})
+	require.NoError(t, err)
+
+	require.Equal(t, []message.Version{message.V1, message.V1}, segmentLogVersions(t, dir))
+
+	require.Equal(t, []Message{msgs[0], msgs[2], msgs[3]}, consumeAll(t, l))
+}
+
 func TestMigrateAPI(t *testing.T) {
 	opts := Options{TimeIndex: true, KeyIndex: true}
 	msgs := message.Gen(4)
