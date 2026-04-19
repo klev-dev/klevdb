@@ -16,26 +16,37 @@ var v1opts = VersionOptions{NewSegmentsVersion: V1}
 var v2opts = VersionOptions{}
 
 func BenchmarkSingle(b *testing.B) {
-	b.Run("V1", func(b *testing.B) { benchmarkSingle(b, v1opts) })
-	b.Run("V2", func(b *testing.B) { benchmarkSingle(b, v2opts) })
-}
-
-func benchmarkSingle(b *testing.B, version VersionOptions) {
-	b.Run("Publish", func(b *testing.B) { benchmarkPublish(b, version) })
-	b.Run("Consume", func(b *testing.B) { benchmarkConsume(b, version) })
-	b.Run("Get", func(b *testing.B) { benchmarkGet(b, version) })
+	b.Run("Publish", func(b *testing.B) {
+		b.Run("V2", func(b *testing.B) { benchmarkPublish(b, v2opts) })
+		b.Run("V1", func(b *testing.B) { benchmarkPublish(b, v1opts) })
+	})
+	b.Run("Consume", func(b *testing.B) {
+		b.Run("V2", func(b *testing.B) { benchmarkConsume(b, v2opts) })
+		b.Run("V1", func(b *testing.B) { benchmarkConsume(b, v1opts) })
+	})
+	b.Run("Get", func(b *testing.B) {
+		b.Run("V2", func(b *testing.B) { benchmarkGet(b, v2opts) })
+		b.Run("V1", func(b *testing.B) { benchmarkGet(b, v1opts) })
+	})
 }
 
 func BenchmarkMulti(b *testing.B) {
-	b.Run("V1", func(b *testing.B) { benchmarkMulti(b, v1opts) })
-	b.Run("V2", func(b *testing.B) { benchmarkMulti(b, v2opts) })
-}
-
-func benchmarkMulti(b *testing.B, version VersionOptions) {
-	b.Run("Base", func(b *testing.B) { benchmarkBaseMulti(b, version) })
-	b.Run("Publish", func(b *testing.B) { benchmarkPublishMulti(b, version) })
-	b.Run("Consume", func(b *testing.B) { benchmarkConsumeMulti(b, version) })
-	b.Run("GetKey", func(b *testing.B) { benchmarkGetKeyMulti(b, version) })
+	b.Run("Base", func(b *testing.B) {
+		b.Run("V2", func(b *testing.B) { benchmarkBaseMulti(b, v2opts) })
+		b.Run("V1", func(b *testing.B) { benchmarkBaseMulti(b, v1opts) })
+	})
+	b.Run("Publish", func(b *testing.B) {
+		b.Run("V2", func(b *testing.B) { benchmarkPublishMulti(b, v2opts) })
+		b.Run("V1", func(b *testing.B) { benchmarkPublishMulti(b, v1opts) })
+	})
+	b.Run("Consume", func(b *testing.B) {
+		b.Run("V2", func(b *testing.B) { benchmarkConsumeMulti(b, v2opts) })
+		b.Run("V1", func(b *testing.B) { benchmarkConsumeMulti(b, v1opts) })
+	})
+	b.Run("GetKey", func(b *testing.B) {
+		b.Run("V2", func(b *testing.B) { benchmarkGetKeyMulti(b, v2opts) })
+		b.Run("V1", func(b *testing.B) { benchmarkGetKeyMulti(b, v1opts) })
+	})
 }
 
 func MkdirBench(b *testing.B) string {
