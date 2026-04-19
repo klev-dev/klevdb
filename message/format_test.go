@@ -146,8 +146,8 @@ func TestPartialMessageHeaderV2(t *testing.T) {
 }
 
 func TestSegmentReadV2LargeTotalLength(t *testing.T) {
-	// A corrupt totalLength = 0x7FFFFFFF passes the negative guard but must be
-	// rejected before attempting a ~2 GB allocation.
+	// keySize > maxMessageBodySize must be rejected before attempting a huge
+	// allocation. CRC is left as zeros; the size guard fires before the CRC check.
 	path := filepath.Join(t.TempDir(), "test.log")
 	f, err := os.Create(path)
 	require.NoError(t, err)
@@ -157,11 +157,8 @@ func TestSegmentReadV2LargeTotalLength(t *testing.T) {
 	_, err = f.Write(h)
 	require.NoError(t, err)
 
-	// Crafted message header: totalLength=0x7FFFFFFF, valueSize=0 — CRC left as
-	// zeros (the size guard fires before the CRC check).
 	var hdr [msgHeaderSize]byte
-	binary.BigEndian.PutUint32(hdr[4:], 0x7FFFFFFF) // totalLength = max int32
-	binary.BigEndian.PutUint32(hdr[24:], 0)         // valueSize = 0
+	binary.BigEndian.PutUint32(hdr[20:], uint32(maxMessageBodySize+1)) // keySize just over the limit
 	_, err = f.Write(hdr[:])
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
@@ -177,23 +174,20 @@ func TestSegmentReadV2LargeTotalLength(t *testing.T) {
 func TestSegmentReadV2NegativeValueSize(t *testing.T) {
 	// Regression test: a negative valueSize (high bit set in the uint32 field) must
 	// be rejected as ErrCorrupted, not cause a slice-bounds panic.
-	// With totalLength=28 and valueSize=int32(-9), keySize derives as 9 but dataSize
-	// is only 8 — without the valueSize<0 guard, msg.Key = dataBytes[:9] panics.
+	// valueSize=int32(-9) triggers the valueSize<0 guard before any CRC check.
 	path := filepath.Join(t.TempDir(), "test.log")
 	f, err := os.Create(path)
 	require.NoError(t, err)
 
-	// Valid file header
 	h, err := V2.newHeader()
 	require.NoError(t, err)
 	_, err = f.Write(h)
 	require.NoError(t, err)
 
-	// Crafted v1 message header: totalLength=28, offset=0, time=0, valueSize=0xFFFFFFF7
-	// CRC left as zeros — the guard fires before the CRC check.
+	// Crafted message header: valueSize field carries a bit pattern that is
+	// negative when interpreted as int32. CRC left as zeros — the guard fires first.
 	var hdr [msgHeaderSize]byte
-	binary.BigEndian.PutUint32(hdr[4:], uint32(totalLengthFixed)) // totalLength = 28
-	binary.BigEndian.PutUint32(hdr[24:], 0xFFFFFFF7)              // valueSize = int32(-9)
+	binary.BigEndian.PutUint32(hdr[24:], 0xFFFFFFF7) // valueSize = int32(-9)
 	_, err = f.Write(hdr[:])
 	require.NoError(t, err)
 	require.NoError(t, f.Close())

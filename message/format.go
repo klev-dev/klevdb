@@ -29,16 +29,26 @@ var magic = [6]byte{0xFF, 'k', 'l', 'e', 'v', 's'}
 const HeaderSize = int64(len(magic) + 2) // magic + Version byte + reserved byte
 
 type Version struct {
-	marker  byte
-	invalid bool
+	marker byte
 }
 
 var (
-	VUnknown         = Version{invalid: true}
+	VUnknown         = Version{}
 	V1               = Version{marker: 255}
 	V2               = Version{marker: 1}
 	VLast    Version = V2 // always last version
 )
+
+func (v Version) String() string {
+	switch v {
+	case V1:
+		return "V1"
+	case V2:
+		return "V2"
+	default:
+		return fmt.Sprintf("Version(unknown:%d)", v.marker)
+	}
+}
 
 func (v Version) newHeader() ([]byte, error) {
 	switch v {
@@ -81,7 +91,7 @@ func Size(m Message, v Version) int64 {
 	case V2:
 		return int64(fixedSize + len(m.Key) + len(m.Value))
 	default:
-		return -1 // TODO
+		panic(fmt.Sprintf("unknown version: %v", v))
 	}
 }
 
@@ -191,13 +201,15 @@ func (w *Writer) writeV1(m Message) (int64, error) {
 
 const trailerMagic uint64 = 0xDEADBEEFFEEDFACE
 
-const (
-	msgHeaderSize    = 4 + 4 + 8 + 8 + 4 // 28: crc+totallen+offset+unixmicro+valuelen
-	trailerSize      = 8
-	fixedSize        = msgHeaderSize + trailerSize // 36 total overhead
-	totalLengthFixed = 8 + 8 + 4 + trailerSize     // 28: offset+unixmicro+valuelen+trailer (no key/val)
+var trailerMagicData = binary.BigEndian.AppendUint64(nil, trailerMagic)
 
-	maxMessageBodySize = 64 * 1024 * 1024 // 64 MiB: guard against corrupt totalLength causing huge allocation
+const (
+	msgHeaderSize = 4 + 8 + 8 + 4 + 4 // 28: crc + offset + unixmicro + keylen + valuelen
+	trailerSize   = 8
+	fixedSize     = msgHeaderSize + trailerSize // 36 total overhead
+
+	headerPayloadSize  = msgHeaderSize - 4 // 24: Offset+UnixMicro+KeyLen+ValueLen
+	maxMessageBodySize = 64 * 1024 * 1024  // 64 MiB: guard against corrupt size fields causing huge allocation
 )
 
 func (w *Writer) writeV2(m Message) (int64, error) {
@@ -209,16 +221,14 @@ func (w *Writer) writeV2(m Message) (int64, error) {
 		w.buff = w.buff[:fullSize]
 	}
 
-	totalLength := uint32(totalLengthFixed + len(m.Key) + len(m.Value))
 	// buf[0:4] left for CRC (written last)
-	binary.BigEndian.PutUint32(w.buff[4:], totalLength)
-	binary.BigEndian.PutUint64(w.buff[8:], uint64(m.Offset))
-	binary.BigEndian.PutUint64(w.buff[16:], uint64(m.Time.UnixMicro()))
+	binary.BigEndian.PutUint64(w.buff[4:], uint64(m.Offset))
+	binary.BigEndian.PutUint64(w.buff[12:], uint64(m.Time.UnixMicro()))
+	binary.BigEndian.PutUint32(w.buff[20:], uint32(len(m.Key)))
 	binary.BigEndian.PutUint32(w.buff[24:], uint32(len(m.Value)))
-	copy(w.buff[28:], m.Key)
-	copy(w.buff[28+len(m.Key):], m.Value)
-	trailerOff := 28 + len(m.Key) + len(m.Value)
-	binary.BigEndian.PutUint64(w.buff[trailerOff:], trailerMagic)
+	copy(w.buff[msgHeaderSize:], m.Key)
+	copy(w.buff[msgHeaderSize+len(m.Key):], m.Value)
+	copy(w.buff[msgHeaderSize+len(m.Key)+len(m.Value):], trailerMagicData)
 
 	// CRC covers buf[4:] (everything after CRC field)
 	crc := crc32.Checksum(w.buff[4:], crc32cTable)
@@ -353,7 +363,7 @@ func (r *Reader) InitialPosition() int64 {
 	case V2:
 		return int64(HeaderSize)
 	default:
-		return -1 // TODO
+		panic(fmt.Sprintf("unknown version: %v", r.v))
 	}
 }
 
@@ -459,24 +469,22 @@ func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err e
 
 	// Step 2: Parse header
 	expectedCRC := binary.BigEndian.Uint32(headerBytes[0:])
-	totalLength := int32(binary.BigEndian.Uint32(headerBytes[4:]))
-	msg.Offset = int64(binary.BigEndian.Uint64(headerBytes[8:]))
-	msg.Time = time.UnixMicro(int64(binary.BigEndian.Uint64(headerBytes[16:]))).UTC()
+	msg.Offset = int64(binary.BigEndian.Uint64(headerBytes[4:]))
+	msg.Time = time.UnixMicro(int64(binary.BigEndian.Uint64(headerBytes[12:]))).UTC()
+	keySize := int32(binary.BigEndian.Uint32(headerBytes[20:]))
 	valueSize := int32(binary.BigEndian.Uint32(headerBytes[24:]))
 
-	// Step 3: Derive key_len; validate
-	keySize := totalLength - int32(totalLengthFixed) - valueSize
-	if keySize < 0 || valueSize < 0 || totalLength < int32(totalLengthFixed) {
+	// Step 3: Validate sizes
+	if keySize < 0 || valueSize < 0 {
 		return -1, errInvalidHeader
 	}
-	if int(keySize)+int(valueSize) > maxMessageBodySize {
+	if int(keySize)+int(valueSize) > maxMessageBodySize { // TODO maybe externally configurable per log + default
 		return -1, errInvalidHeader
 	}
 
 	// Step 4: Allocate payload = headerBytes[4:] (24 bytes) ++ key ++ value ++ trailer.
 	// Combining them avoids passing a stack-allocated slice to crc32, which would
 	// cause headerBytes to escape to the heap and add an extra allocation per read.
-	const headerPayloadSize = msgHeaderSize - 4 // 24: TotalLen+Offset+UnixMicro+ValueLen
 	payloadSize := headerPayloadSize + int(keySize) + int(valueSize) + trailerSize
 	payload := make([]byte, payloadSize)
 	copy(payload[:headerPayloadSize], headerBytes[4:])
@@ -504,7 +512,7 @@ func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err e
 
 	// Step 6: Verify trailer
 	trailerOff := headerPayloadSize + int(keySize) + int(valueSize)
-	if binary.BigEndian.Uint64(payload[trailerOff:]) != trailerMagic {
+	if !bytes.Equal(payload[trailerOff:], trailerMagicData) {
 		return -1, errBadTrailer
 	}
 
