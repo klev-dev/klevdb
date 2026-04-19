@@ -17,12 +17,11 @@ var magic = [6]byte{0xFF, 'k', 'l', 'e', 'v', 'i'}
 const HeaderSize = int64(len(magic) + 2) // magic + version + params
 
 type Version struct {
-	marker  byte
-	invalid bool
+	marker byte
 }
 
 var (
-	VUnknown         = Version{invalid: true}
+	VUnknown         = Version{}
 	V1               = Version{marker: 255}
 	V2               = Version{marker: 1}
 	VLast    Version = V2 // always last version
@@ -136,12 +135,16 @@ func OpenWriter(path string, offset int64, newVersion Version, opts Params) (w *
 
 	switch {
 	case opts.Times && opts.Keys:
+		w.buff = make([]byte, 32)
 		w.writer = w.writeFull
 	case opts.Times:
+		w.buff = make([]byte, 24)
 		w.writer = w.writeTimes
 	case opts.Keys:
+		w.buff = make([]byte, 24)
 		w.writer = w.writeKeys
 	default:
+		w.buff = make([]byte, 16)
 		w.writer = w.writeBase
 	}
 
@@ -153,10 +156,6 @@ func (w *Writer) Write(it Item) error {
 }
 
 func (w *Writer) writeBase(it Item) error {
-	if w.buff == nil {
-		w.buff = make([]byte, 16)
-	}
-
 	binary.BigEndian.PutUint64(w.buff[0:], uint64(it.Offset))
 	binary.BigEndian.PutUint64(w.buff[8:], uint64(it.Position))
 
@@ -170,10 +169,6 @@ func (w *Writer) writeBase(it Item) error {
 }
 
 func (w *Writer) writeTimes(it Item) error {
-	if w.buff == nil {
-		w.buff = make([]byte, 24)
-	}
-
 	binary.BigEndian.PutUint64(w.buff[0:], uint64(it.Offset))
 	binary.BigEndian.PutUint64(w.buff[8:], uint64(it.Position))
 	binary.BigEndian.PutUint64(w.buff[16:], uint64(it.Timestamp))
@@ -188,10 +183,6 @@ func (w *Writer) writeTimes(it Item) error {
 }
 
 func (w *Writer) writeKeys(it Item) error {
-	if w.buff == nil {
-		w.buff = make([]byte, 24)
-	}
-
 	binary.BigEndian.PutUint64(w.buff[0:], uint64(it.Offset))
 	binary.BigEndian.PutUint64(w.buff[8:], uint64(it.Position))
 	binary.BigEndian.PutUint64(w.buff[16:], it.KeyHash)
@@ -206,10 +197,6 @@ func (w *Writer) writeKeys(it Item) error {
 }
 
 func (w *Writer) writeFull(it Item) error {
-	if w.buff == nil {
-		w.buff = make([]byte, 32)
-	}
-
 	binary.BigEndian.PutUint64(w.buff[0:], uint64(it.Offset))
 	binary.BigEndian.PutUint64(w.buff[8:], uint64(it.Position))
 	binary.BigEndian.PutUint64(w.buff[16:], uint64(it.Timestamp))
@@ -260,9 +247,30 @@ func Write(path string, offset int64, newVersion Version, opts Params, index []I
 		}
 	}()
 
-	for _, item := range index {
-		if err := w.Write(item); err != nil {
-			return err
+	switch {
+	case opts.Times && opts.Keys:
+		for _, item := range index {
+			if err := w.writeFull(item); err != nil {
+				return err
+			}
+		}
+	case opts.Times:
+		for _, item := range index {
+			if err := w.writeTimes(item); err != nil {
+				return err
+			}
+		}
+	case opts.Keys:
+		for _, item := range index {
+			if err := w.writeKeys(item); err != nil {
+				return err
+			}
+		}
+	default:
+		for _, item := range index {
+			if err := w.writeBase(item); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -316,23 +324,38 @@ func Read(path string, offset int64, opts Params) ([]Item, error) {
 		return nil, fmt.Errorf("read index: %w", err)
 	}
 
-	var keyOffset = opts.keyOffset()
-
-	var items = make([]Item, dataSize/int64(itemSize))
-	for i := range items { // TODO potentially reader func
-		pos := i * int(itemSize)
-
-		items[i].Offset = int64(binary.BigEndian.Uint64(data[pos:]))
-		items[i].Position = int64(binary.BigEndian.Uint64(data[pos+8:]))
-
-		if opts.Times {
+	var items = make([]Item, dataSize/itemSize)
+	switch {
+	case opts.Times && opts.Keys:
+		for i := range items {
+			pos := i * int(itemSize)
+			items[i].Offset = int64(binary.BigEndian.Uint64(data[pos:]))
+			items[i].Position = int64(binary.BigEndian.Uint64(data[pos+8:]))
+			items[i].Timestamp = int64(binary.BigEndian.Uint64(data[pos+16:]))
+			items[i].KeyHash = binary.BigEndian.Uint64(data[pos+24:])
+		}
+	case opts.Times:
+		for i := range items {
+			pos := i * int(itemSize)
+			items[i].Offset = int64(binary.BigEndian.Uint64(data[pos:]))
+			items[i].Position = int64(binary.BigEndian.Uint64(data[pos+8:]))
 			items[i].Timestamp = int64(binary.BigEndian.Uint64(data[pos+16:]))
 		}
-
-		if opts.Keys {
-			items[i].KeyHash = binary.BigEndian.Uint64(data[pos+keyOffset:])
+	case opts.Keys:
+		for i := range items {
+			pos := i * int(itemSize)
+			items[i].Offset = int64(binary.BigEndian.Uint64(data[pos:]))
+			items[i].Position = int64(binary.BigEndian.Uint64(data[pos+8:]))
+			items[i].KeyHash = binary.BigEndian.Uint64(data[pos+16:])
+		}
+	default:
+		for i := range items {
+			pos := i * int(itemSize)
+			items[i].Offset = int64(binary.BigEndian.Uint64(data[pos:]))
+			items[i].Position = int64(binary.BigEndian.Uint64(data[pos+8:]))
 		}
 	}
+
 	return items, nil
 }
 
