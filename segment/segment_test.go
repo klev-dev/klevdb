@@ -1,8 +1,6 @@
 package segment
 
 import (
-	"encoding/binary"
-	"hash/crc32"
 	"hash/fnv"
 	"os"
 	"testing"
@@ -13,8 +11,6 @@ import (
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
 )
-
-var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
 func clearLastByte(fn string) error {
 	f, err := os.OpenFile(fn, os.O_RDWR, 0600)
@@ -35,32 +31,6 @@ func clearLastByte(fn string) error {
 	return f.Close()
 }
 
-// makeV0Log writes messages in raw V0 format (no file header) to path.
-// V0 per-message layout: [offset:8][unixmicro:8][keysize:4][valuesize:4][crc:4][key][value]
-func makeV0Log(t *testing.T, path string, msgs []message.Message) {
-	t.Helper()
-	f, err := os.Create(path)
-	require.NoError(t, err)
-	defer f.Close()
-
-	for _, m := range msgs {
-		body := append(m.Key, m.Value...)
-		crc := crc32.Checksum(body, crc32cTable)
-
-		var hdr [28]byte
-		binary.BigEndian.PutUint64(hdr[0:], uint64(m.Offset))
-		binary.BigEndian.PutUint64(hdr[8:], uint64(m.Time.UnixMicro()))
-		binary.BigEndian.PutUint32(hdr[16:], uint32(len(m.Key)))
-		binary.BigEndian.PutUint32(hdr[20:], uint32(len(m.Value)))
-		binary.BigEndian.PutUint32(hdr[24:], crc)
-
-		_, err = f.Write(hdr[:])
-		require.NoError(t, err)
-		_, err = f.Write(body)
-		require.NoError(t, err)
-	}
-}
-
 func TestRecover(t *testing.T) {
 	params := index.Params{Times: true, Keys: true}
 	msgs := []message.Message{
@@ -78,7 +48,7 @@ func TestRecover(t *testing.T) {
 		},
 	}
 
-	// V1 sizes (with segment header): truncation positions are header-relative.
+	// V2 message size (with fixed overhead); truncation positions are header-relative.
 	msg0Size := message.Size(msgs[0], message.V2)
 
 	var tests = []struct {
@@ -297,10 +267,17 @@ func TestMigrate(t *testing.T) {
 		dir := t.TempDir()
 		seg := New(dir, 0, false)
 
-		// Write V0 content directly (no segment header).
-		makeV0Log(t, seg.Log, msgs)
+		// Write a V1 log (no file header, same layout as the old pre-versioning format).
+		// Migrate() is expected to rebuild the index from the log when none exists.
+		lw, err := message.OpenWriter(seg.Log, seg.Offset, message.V1)
+		require.NoError(t, err)
+		for _, m := range msgs {
+			_, err = lw.Write(m)
+			require.NoError(t, err)
+		}
+		require.NoError(t, lw.SyncAndClose())
 
-		err := seg.Migrate(message.V2, index.V2, params)
+		err = seg.Migrate(message.V2, index.V2, params)
 		require.NoError(t, err)
 
 		// After migration the file should be readable as V2.
@@ -326,8 +303,14 @@ func TestMigrate(t *testing.T) {
 		dir := t.TempDir()
 		seg := New(dir, 0, false)
 
-		// Write V0 content directly.
-		makeV0Log(t, seg.Log, msgs)
+		// Write a V1 log (no file header); Migrate() rebuilds the index from the log.
+		lw, err := message.OpenWriter(seg.Log, seg.Offset, message.V1)
+		require.NoError(t, err)
+		for _, m := range msgs {
+			_, err = lw.Write(m)
+			require.NoError(t, err)
+		}
+		require.NoError(t, lw.SyncAndClose())
 
 		// Plant a stale .migrate temp file.
 		stale, err := os.Create(seg.Log + ".migrate")

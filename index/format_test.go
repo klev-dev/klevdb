@@ -83,3 +83,39 @@ func TestPartialIndexHeader(t *testing.T) {
 	_, err = Read(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
 }
+
+func TestStat(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "index")
+		f, err := os.Create(path)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		size, count, err := Stat(path, 0, iopts)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), size)
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("V1", func(t *testing.T) {
+		dir := t.TempDir()
+		filename, err := createIndex(dir, indexSz, V1)
+		require.NoError(t, err)
+
+		size, count, err := Stat(filename, 0, iopts)
+		require.NoError(t, err)
+		require.Equal(t, int64(indexSz)*iopts.Size(), size)
+		require.Equal(t, indexSz, count)
+	})
+
+	t.Run("V2", func(t *testing.T) {
+		dir := t.TempDir()
+		filename, err := createIndex(dir, indexSz, V2)
+		require.NoError(t, err)
+
+		size, count, err := Stat(filename, 0, iopts)
+		require.NoError(t, err)
+		require.Equal(t, HeaderSize+int64(indexSz)*iopts.Size(), size)
+		require.Equal(t, indexSz, count)
+	})
+}

@@ -2,10 +2,8 @@ package klevdb
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,34 +19,6 @@ import (
 	"github.com/klev-dev/klevdb/message"
 	"github.com/klev-dev/klevdb/segment"
 )
-
-var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
-
-// writeV0Log writes messages in raw V0 format (no file header) to path.
-// V0 per-message layout: [offset:8][unixmicro:8][keysize:4][valuesize:4][crc:4][key][value]
-func writeV0Log(t *testing.T, path string, msgs []message.Message) {
-	t.Helper()
-	f, err := os.Create(path)
-	require.NoError(t, err)
-	defer f.Close()
-
-	for _, m := range msgs {
-		body := append(m.Key, m.Value...)
-		crc := crc32.Checksum(body, crc32cTable)
-
-		var hdr [28]byte
-		binary.BigEndian.PutUint64(hdr[0:], uint64(m.Offset))
-		binary.BigEndian.PutUint64(hdr[8:], uint64(m.Time.UnixMicro()))
-		binary.BigEndian.PutUint32(hdr[16:], uint32(len(m.Key)))
-		binary.BigEndian.PutUint32(hdr[20:], uint32(len(m.Value)))
-		binary.BigEndian.PutUint32(hdr[24:], crc)
-
-		_, err = f.Write(hdr[:])
-		require.NoError(t, err)
-		_, err = f.Write(body)
-		require.NoError(t, err)
-	}
-}
 
 func publishBatched(t *testing.T, l Log, msgs []Message, batchLen int) {
 	for begin := 0; begin < len(msgs); begin += batchLen {
@@ -1849,7 +1819,7 @@ func segmentLogVersions(t *testing.T, dir string) []message.Version {
 func consumeAll(t *testing.T, l Log) []Message {
 	t.Helper()
 	var all []Message
-	offset := int64(OffsetOldest)
+	offset := OffsetOldest
 	for {
 		next, msgs, err := l.Consume(offset, 32)
 		require.NoError(t, err)
@@ -1876,7 +1846,9 @@ func testVersionV1Constant(t *testing.T) {
 	msgs := message.Gen(4)
 	dir := t.TempDir()
 
-	// Rollover at 2 × V1 message size: msgs 0,1,2 land in seg0; msg3 rolls to seg1.
+	// Rollover fires when segment size strictly exceeds the threshold (size > threshold, not ≥).
+	// With rollover = 2×V1_size: after msgs[0,1] the segment equals the limit; msg[2] tips it
+	// over but is still written to seg0; msg[3] is the first to land in the new seg1.
 	v1opts := Options{
 		Rollover: 2 * message.Size(msgs[0], message.V1),
 		Version:  VersionOptions{NewSegmentsVersion: V1},
@@ -1924,9 +1896,10 @@ func testVersionNewSegmentsV2Only(t *testing.T) {
 
 	require.Equal(t, []message.Version{message.V1}, segmentLogVersions(t, dir))
 
-	// Phase 2: reopen with V2 for new segments, KeepRewriteVersion=true so rewrites stay V1.
-	// message.OpenWriter and index.OpenWriter detect the existing V1 format and continue
-	// appending in V1 until rollover. The rollover-created segment uses V2.
+	// Phase 2: reopen with V2 for new segments, KeepRewriteVersion=true so delete-rewrites stay V1.
+	// message.OpenWriter detects the existing V1 file format and continues appending in V1;
+	// KeepRewriteVersion only controls what version is used when a segment is rewritten by Delete.
+	// The rollover-created segment uses NewSegmentsVersion (V2).
 	l, err = Open(dir, Options{
 		Rollover: rollover,
 		Version: VersionOptions{
@@ -2074,33 +2047,32 @@ func testVersionDowngrade(t *testing.T) {
 func TestMigrateAPI(t *testing.T) {
 	opts := Options{TimeIndex: true, KeyIndex: true}
 	msgs := message.Gen(4)
-
 	dir := t.TempDir()
 
-	// Write a V0 segment directly, bypassing Open() which always creates V1.
-	// Simulates a database created by an older release.
-	seg := segment.New(dir, 0, false)
-	writeV0Log(t, seg.Log, msgs)
+	// Create a V1 segment via the normal API (V1 is the pre-V2 on-disk format).
+	// This produces a complete V1 segment (log + index) simulating a database
+	// created by an older release before V2 became the default.
+	l, err := Open(dir, Options{
+		TimeIndex: true,
+		KeyIndex:  true,
+		Version:   VersionOptions{NewSegmentsVersion: V1},
+	})
+	require.NoError(t, err)
+	publishBatched(t, l, msgs, 1)
+	require.NoError(t, l.Close())
+
+	require.Equal(t, []message.Version{message.V1}, segmentLogVersions(t, dir))
 
 	// Run the public API migration.
 	require.NoError(t, Migrate(dir, opts, V2))
 
-	// After migration the file has the same path but V2 content.
-	r, err := message.OpenReader(seg.Log, seg.Offset)
-	require.NoError(t, err)
-	require.Equal(t, message.V2, r.Version())
-	require.NoError(t, r.Close())
+	// After migration all segments must be V2.
+	require.Equal(t, []message.Version{message.V2}, segmentLogVersions(t, dir))
 
 	// Reopen through the public API and verify all messages are still readable.
-	l, err := Open(dir, opts)
+	l, err = Open(dir, opts)
 	require.NoError(t, err)
 	defer l.Close()
 
-	_, consumed, err := l.Consume(OffsetOldest, int64(len(msgs)))
-	require.NoError(t, err)
-	require.Len(t, consumed, len(msgs))
-	for i, expected := range msgs {
-		require.Equal(t, expected.Key, consumed[i].Key)
-		require.Equal(t, expected.Value, consumed[i].Value)
-	}
+	require.Equal(t, msgs, consumeAll(t, l))
 }
