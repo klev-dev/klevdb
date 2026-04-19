@@ -282,6 +282,10 @@ func Read(path string, offset int64, opts Params) ([]Item, error) {
 	}
 	dataSize := stat.Size()
 
+	if dataSize == 0 {
+		return []Item{}, nil // V1: empty index, no entries
+	}
+
 	var h [HeaderSize]byte
 	if _, err := io.ReadFull(f, h[:]); err != nil {
 		return nil, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)

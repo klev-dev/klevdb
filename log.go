@@ -379,13 +379,18 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	mversion := l.opts.Version.NewSegmentsVersion.messages
 	iversion := l.opts.Version.NewSegmentsVersion.index
 	if l.opts.Version.KeepRewriteVersion {
-		mr, err := message.OpenReader(rdr.segment.Log, rdr.segment.Offset)
-		if err != nil {
-			return nil, 0, err
-		}
-		detected := mr.Version()
-		if err := mr.Close(); err != nil {
-			return nil, 0, err
+		var detected message.Version
+		if wasWriter {
+			detected = l.writer.messages.Version()
+		} else {
+			mr, err := message.OpenReader(rdr.segment.Log, rdr.segment.Offset)
+			if err != nil {
+				return nil, 0, err
+			}
+			detected = mr.Version()
+			if err := mr.Close(); err != nil {
+				return nil, 0, err
+			}
 		}
 		switch detected {
 		case message.V1:

@@ -2083,7 +2083,7 @@ func TestMigrateAPI(t *testing.T) {
 	writeV0Log(t, seg.Log, msgs)
 
 	// Run the public API migration.
-	require.NoError(t, Migrate(dir, opts, message.V2))
+	require.NoError(t, Migrate(dir, opts, V2))
 
 	// After migration the file has the same path but V2 content.
 	r, err := message.OpenReader(seg.Log, seg.Offset)

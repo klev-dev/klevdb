@@ -161,6 +161,10 @@ func OpenWriter(path string, offset int64, newVersion Version) (w *Writer, retEr
 	return w, nil
 }
 
+func (w *Writer) Version() Version {
+	return w.version
+}
+
 func (w *Writer) Write(m Message) (int64, error) {
 	return w.writer(m)
 }
@@ -272,7 +276,7 @@ type Reader struct {
 	Path   string
 	r      *os.File
 	ra     *mmap.ReaderAt
-	v      Version // TODO make public
+	v      Version
 	reader func(position int64, msg *Message) (nextPosition int64, err error)
 }
 

@@ -190,8 +190,8 @@ func Recover(dir string, opts Options) error {
 	})
 }
 
-func Migrate(dir string, opts Options, version message.Version) error {
-	return segment.MigrateDir(dir, version, index.Params{
+func Migrate(dir string, opts Options, version Version) error {
+	return segment.MigrateDir(dir, version.messages, index.Params{
 		Times: opts.TimeIndex,
 		Keys:  opts.KeyIndex,
 	})
