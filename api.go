@@ -2,6 +2,7 @@ package klevdb
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/klev-dev/klevdb/index"
@@ -143,7 +144,10 @@ type Log interface {
 	//   it returns the set of actually deleted offsets.
 	Delete(offsets map[int64]struct{}) (deletedOffsets map[int64]struct{}, deletedSize int64, err error)
 
-	// Size returns the amount of storage associated with a message
+	// Size returns the amount of storage a message occupies in the
+	// NewSegmentsVersion format (see VersionOptions), plus the index overhead.
+	// For logs with mixed V1/V2 segments this may differ from the actual
+	// on-disk size of messages stored in older segments.
 	Size(m Message) int64
 
 	// Stat returns log stats like disk space, number of messages
@@ -195,7 +199,7 @@ func Recover(dir string, opts Options) error {
 
 func Migrate(dir string, opts Options, version Version) error {
 	if version == vUnknown {
-		version = V2
+		return fmt.Errorf("migrate: version must be specified (e.g. klevdb.V2)")
 	}
 	return segment.MigrateDir(dir, version.messages, version.index, index.Params{
 		Times: opts.TimeIndex,

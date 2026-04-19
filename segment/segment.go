@@ -450,6 +450,8 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, 
 	}
 	defer func() { _ = srcLog.Close() }()
 
+	srcVersion := srcLog.Version()
+
 	dstLog, err := message.OpenWriter(dst.Log, dst.Offset, mversion)
 	if err != nil {
 		return nil, err
@@ -470,7 +472,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, 
 
 		if _, ok := dropOffsets[msg.Offset]; ok {
 			dst.DeletedOffsets[msg.Offset] = struct{}{}
-			dst.DeletedSize += message.Size(msg, mversion) + params.Size()
+			dst.DeletedSize += message.Size(msg, srcVersion) + params.Size()
 		} else {
 			dstPosition, err := dstLog.Write(msg)
 			if err != nil {
