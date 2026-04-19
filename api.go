@@ -191,6 +191,9 @@ func Recover(dir string, opts Options) error {
 }
 
 func Migrate(dir string, opts Options, version Version) error {
+	if version == VLast {
+		version = V2
+	}
 	return segment.MigrateDir(dir, version.messages, index.Params{
 		Times: opts.TimeIndex,
 		Keys:  opts.KeyIndex,

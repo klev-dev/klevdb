@@ -91,7 +91,7 @@ func Size(m Message, v Version) int64 {
 	case V2:
 		return int64(fixedSize + len(m.Key) + len(m.Value))
 	default:
-		panic(fmt.Sprintf("unknown version: %v", v))
+		return 0
 	}
 }
 
@@ -419,6 +419,13 @@ func (r *Reader) readV1(position int64, msg *Message) (nextPosition int64, err e
 	keySize := int32(binary.BigEndian.Uint32(headerBytes[16:]))
 	valueSize := int32(binary.BigEndian.Uint32(headerBytes[20:]))
 	expectedCRC := binary.BigEndian.Uint32(headerBytes[24:])
+
+	if keySize < 0 || valueSize < 0 {
+		return -1, errInvalidHeader
+	}
+	if int(keySize)+int(valueSize) > maxMessageBodySize {
+		return -1, errInvalidHeader
+	}
 
 	position += int64(len(headerBytes))
 	messageBytes := make([]byte, keySize+valueSize)
