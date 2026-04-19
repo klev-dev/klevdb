@@ -14,13 +14,16 @@ import (
 )
 
 var ErrCorrupted = errors.New("log corrupted")
-var errShortHeader = fmt.Errorf("%w: short header", ErrCorrupted)
-var errShortMessage = fmt.Errorf("%w: short message", ErrCorrupted)
-var errShortData = fmt.Errorf("%w: short data", ErrCorrupted)
-var errNoMessage = fmt.Errorf("%w: no message", ErrCorrupted)
-var errInvalidHeader = fmt.Errorf("%w: invalid header", ErrCorrupted)
-var errCrcFailed = fmt.Errorf("%w: crc failed", ErrCorrupted)
-var errBadTrailer = fmt.Errorf("%w: bad trailer", ErrCorrupted)
+var errShortHeader    = fmt.Errorf("%w: short header", ErrCorrupted)
+var errShortMessage   = fmt.Errorf("%w: short message", ErrCorrupted)
+var errShortData      = fmt.Errorf("%w: short data", ErrCorrupted)
+var errNoMessage      = fmt.Errorf("%w: no message", ErrCorrupted)
+var errInvalidHeader  = fmt.Errorf("%w: invalid header", ErrCorrupted)
+var errCrcFailed      = fmt.Errorf("%w: crc failed", ErrCorrupted)
+var errBadTrailer     = fmt.Errorf("%w: bad trailer", ErrCorrupted)
+var errMagicNotFound  = fmt.Errorf("%w: magic prefix not found", ErrCorrupted)
+var errUnknownVersion = fmt.Errorf("%w: unknown version", ErrCorrupted)
+var errReservedData   = fmt.Errorf("%w: invalid reserved data", ErrCorrupted)
 
 var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
@@ -73,15 +76,15 @@ func headerParse(h []byte, offset int64) (Version, error) {
 		if int64(binary.BigEndian.Uint64(h)) == offset {
 			return V1, nil
 		}
-		return VUnknown, fmt.Errorf("%w: magic prefix not found", ErrCorrupted) // TODO specific error
+		return VUnknown, errMagicNotFound
 	case data[0] > byte(VLast.marker):
-		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
+		return VUnknown, fmt.Errorf("%w %d", errUnknownVersion, data[0])
 	case data[1] != 0:
-		return VUnknown, fmt.Errorf("%w: invalid reserved data", ErrCorrupted) // TODO specific error
+		return VUnknown, errReservedData
 	case data[0] == V2.marker:
 		return V2, nil
 	default:
-		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
+		return VUnknown, fmt.Errorf("%w %d", errUnknownVersion, data[0])
 	}
 }
 

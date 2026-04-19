@@ -44,9 +44,11 @@ type Options struct {
 	CreateDirs bool
 	// Open the store in readonly mode
 	Readonly bool
-	// Index message keys, enabling GetByKey and OffsetByKey
+	// Index message keys, enabling GetByKey and OffsetByKey.
+	// This setting must not change after the store is first created; changing it will return ErrCorrupted.
 	KeyIndex bool
-	// Index message times, enabling GetByTime and OffsetByTime
+	// Index message times, enabling GetByTime and OffsetByTime.
+	// This setting must not change after the store is first created; changing it will return ErrCorrupted.
 	TimeIndex bool
 	// Force filesystem sync after each Publish
 	AutoSync bool

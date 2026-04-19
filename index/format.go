@@ -10,7 +10,12 @@ import (
 )
 
 var ErrCorrupted = errors.New("index corrupted")
-var errIndexSize = fmt.Errorf("%w: unaligned index size", ErrCorrupted)
+var errIndexSize      = fmt.Errorf("%w: unaligned index size", ErrCorrupted)
+var errMagicNotFound  = fmt.Errorf("%w: magic prefix not found", ErrCorrupted)
+var errUnknownVersion = fmt.Errorf("%w: unknown version", ErrCorrupted)
+var errTimesMismatch  = fmt.Errorf("%w: times index mismatch", ErrCorrupted)
+var errKeysMismatch   = fmt.Errorf("%w: keys index mismatch", ErrCorrupted)
+var errReservedData   = fmt.Errorf("%w: invalid reserved data", ErrCorrupted)
 
 var magic = [6]byte{0xFF, 'k', 'l', 'e', 'v', 'i'}
 
@@ -57,19 +62,19 @@ func headerParse(h []byte, offset int64, opts Params) (Version, error) {
 		if int64(binary.BigEndian.Uint64(h)) == offset {
 			return V1, nil
 		}
-		return VUnknown, fmt.Errorf("%w: magic prefix not found", ErrCorrupted) // TODO specific error
+		return VUnknown, errMagicNotFound
 	case data[0] > byte(VLast.marker):
-		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
+		return VUnknown, fmt.Errorf("%w %d", errUnknownVersion, data[0])
 	case opts.Times != ((data[1] & timesBit) == timesBit):
-		return VUnknown, fmt.Errorf("%w: times index mismatch", ErrCorrupted) // TODO specific error
+		return VUnknown, errTimesMismatch
 	case opts.Keys != ((data[1] & keysBit) == keysBit):
-		return VUnknown, fmt.Errorf("%w: keys index mismatch", ErrCorrupted) // TODO specific error
+		return VUnknown, errKeysMismatch
 	case (data[1] & unusedBits) > 0:
-		return VUnknown, fmt.Errorf("%w: invalid reserved data", ErrCorrupted) // TODO specific error
+		return VUnknown, errReservedData
 	case data[0] == V2.marker:
 		return V2, nil
 	default:
-		return VUnknown, fmt.Errorf("%w: unknown version %d", ErrCorrupted, data[0]) // TODO specific error
+		return VUnknown, fmt.Errorf("%w %d", errUnknownVersion, data[0])
 	}
 }
 
