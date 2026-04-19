@@ -300,16 +300,16 @@ func TestMigrate(t *testing.T) {
 		// Write V0 content directly (no segment header).
 		makeV0Log(t, seg.Log, msgs)
 
-		newSeg, err := seg.Migrate(message.V2)
+		err := seg.Migrate(message.V2, index.V2, params)
 		require.NoError(t, err)
 
-		// After migration the file should be readable as V1.
-		r, err := message.OpenReader(newSeg.Log, newSeg.Offset)
+		// After migration the file should be readable as V2.
+		r, err := message.OpenReader(seg.Log, seg.Offset)
 		require.NoError(t, err)
 		require.Equal(t, message.V2, r.Version())
 		require.NoError(t, r.Close())
 
-		assertMessages(t, newSeg, params, msgs)
+		assertMessages(t, seg, params, msgs)
 	})
 
 	t.Run("NoOp", func(t *testing.T) {
@@ -317,9 +317,9 @@ func TestMigrate(t *testing.T) {
 		seg := New(dir, 0, false)
 		writeMessages(t, seg, params, msgs)
 
-		result, err := seg.Migrate(message.V2)
+		err := seg.Migrate(message.V2, index.V2, params)
 		require.NoError(t, err)
-		require.Equal(t, seg, result)
+		assertMessages(t, seg, params, msgs)
 	})
 
 	t.Run("StaleTemp", func(t *testing.T) {
@@ -334,15 +334,15 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, stale.Close())
 
-		result, err := seg.Migrate(message.V2)
+		err = seg.Migrate(message.V2, index.V2, params)
 		require.NoError(t, err)
 
-		r, err := message.OpenReader(result.Log, result.Offset)
+		r, err := message.OpenReader(seg.Log, seg.Offset)
 		require.NoError(t, err)
 		require.Equal(t, message.V2, r.Version())
 		require.NoError(t, r.Close())
 
-		assertMessages(t, result, params, msgs)
+		assertMessages(t, seg, params, msgs)
 	})
 }
 

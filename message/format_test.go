@@ -30,7 +30,7 @@ func TestWriteReadV1(t *testing.T) {
 	err = w.SyncAndClose()
 	require.NoError(t, err)
 
-	// V0 detection: OpenReader(path, offset) detects V0 when the first 8 bytes
+	// V1 detection: OpenReader(path, offset) detects V1 when the first 8 bytes
 	// of the file equal the segment offset. msgs[0].Offset == 5 is used as the
 	// segment offset so detection works correctly.
 	t.Run("Direct", func(t *testing.T) {
@@ -157,7 +157,7 @@ func TestSegmentReadV2LargeTotalLength(t *testing.T) {
 	_, err = f.Write(h)
 	require.NoError(t, err)
 
-	var hdr [msgHeaderSize]byte
+	var hdr [v2HeaderSize]byte
 	binary.BigEndian.PutUint32(hdr[20:], uint32(maxMessageBodySize+1)) // keySize just over the limit
 	_, err = f.Write(hdr[:])
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestSegmentReadV2NegativeValueSize(t *testing.T) {
 
 	// Crafted message header: valueSize field carries a bit pattern that is
 	// negative when interpreted as int32. CRC left as zeros — the guard fires first.
-	var hdr [msgHeaderSize]byte
+	var hdr [v2HeaderSize]byte
 	binary.BigEndian.PutUint32(hdr[24:], 0xFFFFFFF7) // valueSize = int32(-9)
 	_, err = f.Write(hdr[:])
 	require.NoError(t, err)

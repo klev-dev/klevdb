@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/klev-dev/klevdb/index"
 	"github.com/klev-dev/klevdb/message"
@@ -128,7 +129,7 @@ func (s Segment) Recover(params index.Params) error {
 	var position = log.InitialPosition()
 	var indexTime int64
 	var corrupted = false
-	var logIndex []index.Item
+	var restoreIndex []index.Item
 	for {
 		msg, nextPosition, err := log.Read(position)
 		if errors.Is(err, io.EOF) {
@@ -145,10 +146,10 @@ func (s Segment) Recover(params index.Params) error {
 		}
 
 		item := params.NewItem(msg, position, indexTime)
-		logIndex = append(logIndex, item)
+		restoreIndex = append(restoreIndex, item)
+		indexTime = item.Timestamp
 
 		position = nextPosition
-		indexTime = item.Timestamp
 	}
 
 	if err := log.Close(); err != nil {
@@ -176,15 +177,8 @@ func (s Segment) Recover(params index.Params) error {
 		corruptedIndex = true
 	case err != nil:
 		return err
-	case len(logIndex) != len(items):
+	case !slices.Equal(items, restoreIndex):
 		corruptedIndex = true
-	default:
-		for i, item := range logIndex {
-			if item != items[i] {
-				corruptedIndex = true
-				break
-			}
-		}
 	}
 
 	if corruptedIndex {
@@ -207,7 +201,7 @@ func (s Segment) NeedsReindex() (bool, error) {
 	case err != nil:
 		return false, fmt.Errorf("needs reindex stat: %w", err)
 	case info.Size() <= index.HeaderSize:
-		// header-only or partial header: no index entries present
+		// V2: header-only (no entries); V1: empty or partial first entry — reindex either way
 		return true, nil
 	default:
 		return false, nil
@@ -238,7 +232,7 @@ func (s Segment) Reindex(params index.Params, version index.Version) ([]index.It
 func (s Segment) ReindexReader(params index.Params, log *message.Reader, version index.Version) ([]index.Item, error) {
 	var position = log.InitialPosition()
 	var indexTime int64
-	var items []index.Item
+	var newIndex []index.Item
 	for {
 		msg, nextPosition, err := log.Read(position)
 		if errors.Is(err, io.EOF) {
@@ -248,16 +242,16 @@ func (s Segment) ReindexReader(params index.Params, log *message.Reader, version
 		}
 
 		item := params.NewItem(msg, position, indexTime)
-		items = append(items, item)
+		newIndex = append(newIndex, item)
 
 		position = nextPosition
 		indexTime = item.Timestamp
 	}
 
-	if err := index.Write(s.Index, s.Offset, version, params, items); err != nil {
+	if err := index.Write(s.Index, s.Offset, version, params, newIndex); err != nil {
 		return nil, err
 	}
-	return items, nil
+	return newIndex, nil
 }
 
 func (s Segment) Backup(targetDir string) error {
@@ -286,67 +280,76 @@ func (s Segment) Backup(targetDir string) error {
 	return nil
 }
 
-func (olds Segment) Migrate(version message.Version) (Segment, error) {
-	oldLog, err := message.OpenReader(olds.Log, olds.Offset)
+func (s Segment) Migrate(mversion message.Version, iversion index.Version, params index.Params) error {
+	oldLog, err := message.OpenReader(s.Log, s.Offset)
 	if err != nil {
-		return Segment{}, fmt.Errorf("migrate open reader: %w", err)
+		return fmt.Errorf("migrate open reader: %w", err)
 	}
 	defer func() { _ = oldLog.Close() }()
 
-	if oldLog.Version() == version {
-		return olds, nil
+	if oldLog.Version() == mversion {
+		return nil
 	}
 
 	// Remove the index first to guarantee its rebuild and migrated
-	switch err := os.Remove(olds.Index); {
+	switch err := os.Remove(s.Index); {
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
-		return Segment{}, fmt.Errorf("migrate index remove: %w", err)
+		return fmt.Errorf("migrate index remove: %w", err)
 	}
 
-	s := olds.NewAt(olds.Offset) // TODO NewForMigrate
 	migratedPath := s.Log + ".migrate"
 	if err := os.Remove(migratedPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return Segment{}, fmt.Errorf("migrate remove stale temp: %w", err)
+		return fmt.Errorf("migrate remove stale temp: %w", err)
 	}
-	migratedLog, err := message.OpenWriter(migratedPath, s.Offset, version)
+	migratedLog, err := message.OpenWriter(migratedPath, s.Offset, mversion)
 	if err != nil {
-		return Segment{}, fmt.Errorf("migrate open writer: %w", err)
+		return fmt.Errorf("migrate open writer: %w", err)
 	}
 	defer func() { _ = migratedLog.Close() }() // ignoring since its only applicable if an error has happened
 
-	var position = oldLog.InitialPosition()
+	var oldPosition = oldLog.InitialPosition()
+	var indexTime int64
+	var migratedIndex []index.Item
 	for {
-		msg, nextPosition, err := oldLog.Read(position)
+		msg, nextOldPosition, err := oldLog.Read(oldPosition)
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return Segment{}, fmt.Errorf("migrate read: %w", err)
+			return fmt.Errorf("migrate read: %w", err)
 		}
 
-		if _, err := migratedLog.Write(msg); err != nil {
-			return Segment{}, fmt.Errorf("migrate write: %w", err)
+		migratedPosition, err := migratedLog.Write(msg)
+		if err != nil {
+			return fmt.Errorf("migrate write: %w", err)
 		}
 
-		position = nextPosition
+		item := params.NewItem(msg, migratedPosition, indexTime)
+		migratedIndex = append(migratedIndex, item)
+		indexTime = item.Timestamp
+
+		oldPosition = nextOldPosition
 	}
 
 	if err := oldLog.Close(); err != nil {
-		return Segment{}, fmt.Errorf("migrate close old log: %w", err)
+		return fmt.Errorf("migrate close old log: %w", err)
 	}
 	if err := migratedLog.SyncAndClose(); err != nil {
-		return Segment{}, fmt.Errorf("migrate close migrated log: %w", err)
+		return fmt.Errorf("migrate close migrated log: %w", err)
 	}
 
 	if err := os.Rename(migratedLog.Path, s.Log); err != nil {
-		return Segment{}, fmt.Errorf("migrate log rename: %w", err)
+		return fmt.Errorf("migrate log rename: %w", err)
+	}
+	if err := index.Write(s.Index, s.Offset, iversion, params, migratedIndex); err != nil {
+		return fmt.Errorf("migrate index write: %w", err)
 	}
 
 	if err := s.syncDir(); err != nil {
-		return Segment{}, fmt.Errorf("migrate sync dir: %w", err)
+		return fmt.Errorf("migrate sync dir: %w", err)
 	}
 
-	return s, nil
+	return nil
 }
 
 func (olds Segment) Rename(news Segment) error {
@@ -455,7 +458,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, 
 
 	var srcPosition = srcLog.InitialPosition()
 	var indexTime int64
-	var dstItems []index.Item
+	var dstIndex []index.Item
 	for {
 		msg, nextSrcPosition, err := srcLog.Read(srcPosition)
 		if err != nil {
@@ -476,7 +479,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, 
 			dst.SurviveOffsets[msg.Offset] = struct{}{}
 
 			item := params.NewItem(msg, dstPosition, indexTime)
-			dstItems = append(dstItems, item)
+			dstIndex = append(dstIndex, item)
 			indexTime = item.Timestamp
 		}
 
@@ -489,7 +492,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, 
 	if err := dstLog.SyncAndClose(); err != nil {
 		return nil, err
 	}
-	if err := index.Write(dst.Index, dst.Offset, iversion, params, dstItems); err != nil {
+	if err := index.Write(dst.Index, dst.Offset, iversion, params, dstIndex); err != nil {
 		return nil, err
 	}
 

@@ -94,7 +94,7 @@ func RecoverDir(dir string, params index.Params) error {
 	}
 }
 
-func MigrateDir(dir string, version message.Version, params index.Params) error {
+func MigrateDir(dir string, mversion message.Version, iversion index.Version, params index.Params) error {
 	switch segments, err := Find(dir, true); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
@@ -104,7 +104,7 @@ func MigrateDir(dir string, version message.Version, params index.Params) error 
 		return nil
 	default:
 		for _, seg := range segments {
-			if _, err := seg.Migrate(version); err != nil {
+			if err := seg.Migrate(mversion, iversion, params); err != nil {
 				return err
 			}
 		}

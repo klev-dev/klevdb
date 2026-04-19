@@ -26,7 +26,7 @@ func Open(dir string, opts Options) (result Log, err error) {
 	if opts.Rollover <= 0 {
 		opts.Rollover = 1024 * 1024
 	}
-	if opts.Version.NewSegmentsVersion == VLast {
+	if opts.Version.NewSegmentsVersion == vUnknown {
 		opts.Version.NewSegmentsVersion = V2
 	}
 
@@ -97,7 +97,7 @@ func Open(dir string, opts Options) (result Log, err error) {
 
 		if opts.Version.EagerVersionMigrate {
 			for _, seg := range segments {
-				if _, err := seg.Migrate(opts.Version.NewSegmentsVersion.messages); err != nil {
+				if err := seg.Migrate(opts.Version.NewSegmentsVersion.messages, opts.Version.NewSegmentsVersion.index, params); err != nil {
 					return nil, fmt.Errorf("open migrate: %w", err)
 				}
 			}

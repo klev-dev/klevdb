@@ -26,7 +26,8 @@ var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
 var magic = [6]byte{0xFF, 'k', 'l', 'e', 'v', 's'}
 
-const HeaderSize = int64(len(magic) + 2) // magic + Version byte + reserved byte
+const HeaderSize = int64(len(magic) + 2)    // magic + Version byte + reserved byte
+const maxMessageBodySize = 64 * 1024 * 1024 // 64 MiB: guard against corrupt size fields causing huge allocation
 
 type Version struct {
 	marker byte
@@ -169,13 +170,16 @@ func (w *Writer) Write(m Message) (int64, error) {
 	return w.writer(m)
 }
 
+const (
+	v1HeaderSize = 8 + 8 + 4 + 4 + 4 // 28: offset + unixmicro + keylen + valuelen + crc
+)
+
 func (w *Writer) writeV1(m Message) (int64, error) {
-	var fullSize = 8 + // offset
-		8 + // unix micro
-		4 + // key size
-		4 + // value size
-		4 + // crc
-		len(m.Key) + len(m.Value)
+	var messageSize = len(m.Key) + len(m.Value)
+	if messageSize > maxMessageBodySize {
+		return 0, fmt.Errorf("message too big")
+	}
+	var fullSize = v1HeaderSize + messageSize
 
 	if w.buff == nil || cap(w.buff) < fullSize {
 		w.buff = make([]byte, fullSize)
@@ -208,16 +212,19 @@ const trailerMagic uint64 = 0xDEADBEEFFEEDFACE
 var trailerMagicData = binary.BigEndian.AppendUint64(nil, trailerMagic)
 
 const (
-	msgHeaderSize = 4 + 8 + 8 + 4 + 4 // 28: crc + offset + unixmicro + keylen + valuelen
-	trailerSize   = 8
-	fixedSize     = msgHeaderSize + trailerSize // 36 total overhead
+	v2HeaderSize = 4 + 8 + 8 + 4 + 4 // 28: crc + offset + unixmicro + keylen + valuelen
+	trailerSize  = 8
+	fixedSize    = v2HeaderSize + trailerSize // 36 total overhead
 
-	headerPayloadSize  = msgHeaderSize - 4 // 24: Offset+UnixMicro+KeyLen+ValueLen
-	maxMessageBodySize = 64 * 1024 * 1024  // 64 MiB: guard against corrupt size fields causing huge allocation
+	headerPayloadSize = v2HeaderSize - 4 // 24: Offset+UnixMicro+KeyLen+ValueLen
 )
 
 func (w *Writer) writeV2(m Message) (int64, error) {
-	fullSize := fixedSize + len(m.Key) + len(m.Value)
+	messageSize := len(m.Key) + len(m.Value)
+	if messageSize > maxMessageBodySize {
+		return 0, fmt.Errorf("message too big")
+	}
+	fullSize := fixedSize + messageSize
 
 	if w.buff == nil || cap(w.buff) < fullSize {
 		w.buff = make([]byte, fullSize)
@@ -230,9 +237,9 @@ func (w *Writer) writeV2(m Message) (int64, error) {
 	binary.BigEndian.PutUint64(w.buff[12:], uint64(m.Time.UnixMicro()))
 	binary.BigEndian.PutUint32(w.buff[20:], uint32(len(m.Key)))
 	binary.BigEndian.PutUint32(w.buff[24:], uint32(len(m.Value)))
-	copy(w.buff[msgHeaderSize:], m.Key)
-	copy(w.buff[msgHeaderSize+len(m.Key):], m.Value)
-	copy(w.buff[msgHeaderSize+len(m.Key)+len(m.Value):], trailerMagicData)
+	copy(w.buff[v2HeaderSize:], m.Key)
+	copy(w.buff[v2HeaderSize+len(m.Key):], m.Value)
+	copy(w.buff[v2HeaderSize+len(m.Key)+len(m.Value):], trailerMagicData)
 
 	// CRC covers buf[4:] (everything after CRC field)
 	crc := crc32.Checksum(w.buff[4:], crc32cTable)
@@ -399,7 +406,8 @@ func (r *Reader) Read(position int64) (msg Message, nextPosition int64, err erro
 }
 
 func (r *Reader) readV1(position int64, msg *Message) (nextPosition int64, err error) {
-	var headerBytes [8 + 8 + 4 + 4 + 4]byte
+	// Read header
+	var headerBytes [v1HeaderSize]byte
 	if r.ra != nil {
 		_, err = r.ra.ReadAt(headerBytes[:], position)
 	} else {
@@ -414,20 +422,23 @@ func (r *Reader) readV1(position int64, msg *Message) (nextPosition int64, err e
 		return -1, fmt.Errorf("read header: %w", err)
 	}
 
+	// Parse header
 	msg.Offset = int64(binary.BigEndian.Uint64(headerBytes[0:]))
 	msg.Time = time.UnixMicro(int64(binary.BigEndian.Uint64(headerBytes[8:]))).UTC()
 	keySize := int32(binary.BigEndian.Uint32(headerBytes[16:]))
 	valueSize := int32(binary.BigEndian.Uint32(headerBytes[20:]))
 	expectedCRC := binary.BigEndian.Uint32(headerBytes[24:])
 
+	// Validate sizes
 	if keySize < 0 || valueSize < 0 {
 		return -1, errInvalidHeader
 	}
 	if int(keySize)+int(valueSize) > maxMessageBodySize {
 		return -1, errInvalidHeader
 	}
+	position += v1HeaderSize
 
-	position += int64(len(headerBytes))
+	// Allocate and read key/value
 	messageBytes := make([]byte, keySize+valueSize)
 	if r.ra != nil {
 		_, err = r.ra.ReadAt(messageBytes, position)
@@ -445,11 +456,13 @@ func (r *Reader) readV1(position int64, msg *Message) (nextPosition int64, err e
 		return -1, fmt.Errorf("read message: %w", err)
 	}
 
+	// Verify CRC over the payload
 	actualCRC := crc32.Checksum(messageBytes, crc32cTable)
 	if expectedCRC != actualCRC {
 		return -1, errCrcFailed
 	}
 
+	// Assign key/value
 	if keySize > 0 {
 		msg.Key = messageBytes[:keySize]
 	}
@@ -462,8 +475,8 @@ func (r *Reader) readV1(position int64, msg *Message) (nextPosition int64, err e
 }
 
 func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err error) {
-	// Step 1: Read 28-byte header
-	var headerBytes [msgHeaderSize]byte
+	// Read header
+	var headerBytes [v2HeaderSize]byte
 	if r.ra != nil {
 		_, err = r.ra.ReadAt(headerBytes[:], position)
 	} else {
@@ -478,31 +491,32 @@ func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err e
 		return -1, fmt.Errorf("read header: %w", err)
 	}
 
-	// Step 2: Parse header
+	// Parse header
 	expectedCRC := binary.BigEndian.Uint32(headerBytes[0:])
 	msg.Offset = int64(binary.BigEndian.Uint64(headerBytes[4:]))
 	msg.Time = time.UnixMicro(int64(binary.BigEndian.Uint64(headerBytes[12:]))).UTC()
 	keySize := int32(binary.BigEndian.Uint32(headerBytes[20:]))
 	valueSize := int32(binary.BigEndian.Uint32(headerBytes[24:]))
 
-	// Step 3: Validate sizes
+	// Validate sizes
 	if keySize < 0 || valueSize < 0 {
 		return -1, errInvalidHeader
 	}
-	if int(keySize)+int(valueSize) > maxMessageBodySize { // TODO maybe externally configurable per log + default
+	if int(keySize)+int(valueSize) > maxMessageBodySize {
 		return -1, errInvalidHeader
 	}
+	position += v2HeaderSize
 
-	// Step 4: Allocate payload = headerBytes[4:] (24 bytes) ++ key ++ value ++ trailer.
+	// Allocate payload = headerBytes[4:] (24 bytes) ++ key ++ value ++ trailer.
 	// Combining them avoids passing a stack-allocated slice to crc32, which would
 	// cause headerBytes to escape to the heap and add an extra allocation per read.
 	payloadSize := headerPayloadSize + int(keySize) + int(valueSize) + trailerSize
 	payload := make([]byte, payloadSize)
 	copy(payload[:headerPayloadSize], headerBytes[4:])
 	if r.ra != nil {
-		_, err = r.ra.ReadAt(payload[headerPayloadSize:], position+msgHeaderSize)
+		_, err = r.ra.ReadAt(payload[headerPayloadSize:], position)
 	} else {
-		_, err = r.r.ReadAt(payload[headerPayloadSize:], position+msgHeaderSize)
+		_, err = r.r.ReadAt(payload[headerPayloadSize:], position)
 	}
 	switch {
 	case err == nil:
@@ -515,19 +529,19 @@ func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err e
 		return -1, fmt.Errorf("read data: %w", err)
 	}
 
-	// Step 5: Verify CRC over the combined payload (already heap-allocated, no escape)
+	// Verify CRC over the combined payload (already heap-allocated, no escape)
 	actualCRC := crc32.Checksum(payload, crc32cTable)
 	if expectedCRC != actualCRC {
 		return -1, errCrcFailed
 	}
 
-	// Step 6: Verify trailer
+	// Verify trailer
 	trailerOff := headerPayloadSize + int(keySize) + int(valueSize)
 	if !bytes.Equal(payload[trailerOff:], trailerMagicData) {
 		return -1, errBadTrailer
 	}
 
-	// Step 7: Assign key/value
+	// Assign key/value
 	if keySize > 0 {
 		msg.Key = payload[headerPayloadSize : headerPayloadSize+int(keySize)]
 	}
@@ -535,7 +549,7 @@ func (r *Reader) readV2(position int64, msg *Message) (nextPosition int64, err e
 		msg.Value = payload[headerPayloadSize+int(keySize) : headerPayloadSize+int(keySize)+int(valueSize)]
 	}
 
-	return position + int64(msgHeaderSize) + int64(int(keySize)+int(valueSize)+trailerSize), nil
+	return position + int64(int(keySize)+int(valueSize)+trailerSize), nil
 }
 
 func (r *Reader) Close() error {

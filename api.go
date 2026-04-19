@@ -64,9 +64,10 @@ type Version struct {
 }
 
 var (
-	V1    = Version{message.V1, index.V1}
-	V2    = Version{message.V2, index.V2}
-	VLast = Version{}
+	vUnknown = Version{}
+	V1       = Version{message.V1, index.V1}
+	V2       = Version{message.V2, index.V2}
+	VLast    = V2
 )
 
 type VersionOptions struct {
@@ -191,10 +192,10 @@ func Recover(dir string, opts Options) error {
 }
 
 func Migrate(dir string, opts Options, version Version) error {
-	if version == VLast {
+	if version == vUnknown {
 		version = V2
 	}
-	return segment.MigrateDir(dir, version.messages, index.Params{
+	return segment.MigrateDir(dir, version.messages, version.index, index.Params{
 		Times: opts.TimeIndex,
 		Keys:  opts.KeyIndex,
 	})
