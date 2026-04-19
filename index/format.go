@@ -9,13 +9,15 @@ import (
 	"os"
 )
 
-var ErrCorrupted = errors.New("index corrupted")
-var errIndexSize      = fmt.Errorf("%w: unaligned index size", ErrCorrupted)
-var errMagicNotFound  = fmt.Errorf("%w: magic prefix not found", ErrCorrupted)
-var errUnknownVersion = fmt.Errorf("%w: unknown version", ErrCorrupted)
-var errTimesMismatch  = fmt.Errorf("%w: times index mismatch", ErrCorrupted)
-var errKeysMismatch   = fmt.Errorf("%w: keys index mismatch", ErrCorrupted)
-var errReservedData   = fmt.Errorf("%w: invalid reserved data", ErrCorrupted)
+var (
+	ErrCorrupted      = errors.New("index corrupted")
+	errIndexSize      = fmt.Errorf("%w: unaligned index size", ErrCorrupted)
+	errMagicNotFound  = fmt.Errorf("%w: magic prefix not found", ErrCorrupted)
+	errUnknownVersion = fmt.Errorf("%w: unknown version", ErrCorrupted)
+	errTimesMismatch  = fmt.Errorf("%w: times index mismatch", ErrCorrupted)
+	errKeysMismatch   = fmt.Errorf("%w: keys index mismatch", ErrCorrupted)
+	errReservedData   = fmt.Errorf("%w: invalid reserved data", ErrCorrupted)
+)
 
 var magic = [6]byte{0xFF, 'k', 'l', 'e', 'v', 'i'}
 
@@ -110,7 +112,7 @@ func OpenWriter(path string, offset int64, newVersion Version, opts Params) (w *
 	pos := stat.Size()
 	var v Version
 	if pos == 0 {
-		h, err := newVersion.newHeader(opts) // TODO configure upgrades?
+		h, err := newVersion.newHeader(opts)
 		if err != nil {
 			return nil, fmt.Errorf("write index header: %w", err)
 		}

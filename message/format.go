@@ -13,17 +13,19 @@ import (
 	"golang.org/x/exp/mmap"
 )
 
-var ErrCorrupted = errors.New("log corrupted")
-var errShortHeader    = fmt.Errorf("%w: short header", ErrCorrupted)
-var errShortMessage   = fmt.Errorf("%w: short message", ErrCorrupted)
-var errShortData      = fmt.Errorf("%w: short data", ErrCorrupted)
-var errNoMessage      = fmt.Errorf("%w: no message", ErrCorrupted)
-var errInvalidHeader  = fmt.Errorf("%w: invalid header", ErrCorrupted)
-var errCrcFailed      = fmt.Errorf("%w: crc failed", ErrCorrupted)
-var errBadTrailer     = fmt.Errorf("%w: bad trailer", ErrCorrupted)
-var errMagicNotFound  = fmt.Errorf("%w: magic prefix not found", ErrCorrupted)
-var errUnknownVersion = fmt.Errorf("%w: unknown version", ErrCorrupted)
-var errReservedData   = fmt.Errorf("%w: invalid reserved data", ErrCorrupted)
+var (
+	ErrCorrupted      = errors.New("log corrupted")
+	errShortHeader    = fmt.Errorf("%w: short header", ErrCorrupted)
+	errShortMessage   = fmt.Errorf("%w: short message", ErrCorrupted)
+	errShortData      = fmt.Errorf("%w: short data", ErrCorrupted)
+	errNoMessage      = fmt.Errorf("%w: no message", ErrCorrupted)
+	errInvalidHeader  = fmt.Errorf("%w: invalid header", ErrCorrupted)
+	errCrcFailed      = fmt.Errorf("%w: crc failed", ErrCorrupted)
+	errBadTrailer     = fmt.Errorf("%w: bad trailer", ErrCorrupted)
+	errMagicNotFound  = fmt.Errorf("%w: magic prefix not found", ErrCorrupted)
+	errUnknownVersion = fmt.Errorf("%w: unknown version", ErrCorrupted)
+	errReservedData   = fmt.Errorf("%w: invalid reserved data", ErrCorrupted)
+)
 
 var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
