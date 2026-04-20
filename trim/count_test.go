@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func TestByCount(t *testing.T) {

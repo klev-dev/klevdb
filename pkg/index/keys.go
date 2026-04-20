@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"hash/fnv"
 
-	"github.com/klev-dev/klevdb/message"
 	art "github.com/plar/go-adaptive-radix-tree/v2"
+
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 var ErrKeyNotFound = fmt.Errorf("key: %w", message.ErrNotFound)

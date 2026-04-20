@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func TestByAge(t *testing.T) {

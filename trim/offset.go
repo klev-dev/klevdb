@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 // FindByOffset returns a set of offsets for messages whose

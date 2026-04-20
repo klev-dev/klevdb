@@ -3,7 +3,7 @@ package index
 import (
 	"fmt"
 
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 var ErrOffsetIndexEmpty = fmt.Errorf("%w: no offset items", message.ErrInvalidOffset)

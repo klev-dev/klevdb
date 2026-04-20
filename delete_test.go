@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func TestDeleteMulti(t *testing.T) {

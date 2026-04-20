@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 var ErrTimeIndexEmpty = fmt.Errorf("%w: no time items", message.ErrInvalidOffset)

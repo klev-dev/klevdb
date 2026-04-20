@@ -3,7 +3,7 @@ package klevdb
 import (
 	"context"
 
-	"github.com/klev-dev/klevdb/notify"
+	"github.com/klev-dev/klevdb/pkg/notify"
 )
 
 // BlockingLog enhances [Log] adding blocking consume

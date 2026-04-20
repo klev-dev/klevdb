@@ -3,9 +3,10 @@ package index
 import (
 	"testing"
 
-	"github.com/klev-dev/klevdb/message"
 	art "github.com/plar/go-adaptive-radix-tree/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func TestKeys(t *testing.T) {

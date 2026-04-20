@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/index"
 	"github.com/klev-dev/klevdb/pkg/kdir"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 type Segment struct {

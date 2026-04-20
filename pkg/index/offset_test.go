@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func genItems(offsets ...int64) []Item {

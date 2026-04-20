@@ -1,7 +1,7 @@
 package index
 
 import (
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 type Item struct {

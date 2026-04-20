@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/klevdb/segment"
+	"github.com/klev-dev/klevdb/pkg/index"
+	"github.com/klev-dev/klevdb/pkg/message"
+	"github.com/klev-dev/klevdb/pkg/segment"
 )
 
 func publishBatched(t *testing.T, l Log, msgs []Message, batchLen int) {

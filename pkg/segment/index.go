@@ -3,7 +3,7 @@ package segment
 import (
 	"fmt"
 
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 type Offsetter interface {

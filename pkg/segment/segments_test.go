@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/klev-dev/klevdb/index"
+	"github.com/klev-dev/klevdb/pkg/index"
 )
 
 func TestRecoverDir(t *testing.T) {

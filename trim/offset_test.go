@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func TestByOffset(t *testing.T) {
@@ -68,7 +69,7 @@ func TestByOffset(t *testing.T) {
 		require.Equal(t, 0, stat.Messages)
 
 		msg, err = l.Get(klevdb.OffsetOldest)
-		require.ErrorIs(t, err, message.ErrInvalidOffset)
+		require.ErrorIs(t, err, klevdb.ErrInvalidOffset)
 	})
 }
 
@@ -91,7 +92,7 @@ func TestByOffsetRelative(t *testing.T) {
 	require.Equal(t, int64(0), msg.Offset)
 
 	t.Run("Oldest", func(t *testing.T) {
-		off, sz, err := ByOffset(context.TODO(), l, message.OffsetOldest)
+		off, sz, err := ByOffset(context.TODO(), l, klevdb.OffsetOldest)
 		require.Len(t, off, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), sz)
@@ -106,7 +107,7 @@ func TestByOffsetRelative(t *testing.T) {
 	})
 
 	t.Run("Newest", func(t *testing.T) {
-		off, sz, err := ByOffset(context.TODO(), l, message.OffsetNewest)
+		off, sz, err := ByOffset(context.TODO(), l, klevdb.OffsetNewest)
 		require.Len(t, off, 20)
 		require.NoError(t, err)
 		require.Equal(t, l.Size(msgs[0])*20, sz)
@@ -116,6 +117,6 @@ func TestByOffsetRelative(t *testing.T) {
 		require.Equal(t, 0, stat.Messages)
 
 		msg, err = l.Get(klevdb.OffsetOldest)
-		require.ErrorIs(t, err, message.ErrInvalidOffset)
+		require.ErrorIs(t, err, klevdb.ErrInvalidOffset)
 	})
 }

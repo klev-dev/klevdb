@@ -9,9 +9,9 @@ import (
 
 	art "github.com/plar/go-adaptive-radix-tree/v2"
 
-	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/klevdb/segment"
+	"github.com/klev-dev/klevdb/pkg/index"
+	"github.com/klev-dev/klevdb/pkg/message"
+	"github.com/klev-dev/klevdb/pkg/segment"
 )
 
 type reader struct {

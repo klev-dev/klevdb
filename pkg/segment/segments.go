@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/index"
 	"github.com/klev-dev/klevdb/pkg/kdir"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func Find(dir string, autoSync bool) ([]Segment, error) {

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/klevdb/segment"
+	"github.com/klev-dev/klevdb/pkg/index"
+	"github.com/klev-dev/klevdb/pkg/message"
+	"github.com/klev-dev/klevdb/pkg/segment"
 )
 
 const (

@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/klevdb/message"
+	"github.com/klev-dev/klevdb/pkg/index"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func clearLastByte(fn string) error {

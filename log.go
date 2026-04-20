@@ -10,9 +10,9 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/klev-dev/klevdb/index"
-	"github.com/klev-dev/klevdb/message"
-	"github.com/klev-dev/klevdb/segment"
+	"github.com/klev-dev/klevdb/pkg/index"
+	"github.com/klev-dev/klevdb/pkg/message"
+	"github.com/klev-dev/klevdb/pkg/segment"
 )
 
 var errNoKeyIndex = fmt.Errorf("%w by key", ErrNoIndex)

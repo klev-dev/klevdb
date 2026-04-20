@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/klevdb/message"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klev-dev/klevdb"
+	"github.com/klev-dev/klevdb/pkg/message"
 )
 
 func TestUpdates(t *testing.T) {
@@ -51,7 +52,7 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		dmsgs := []message.Message{msgs[0]}
+		dmsgs := []klevdb.Message{msgs[0]}
 		dmsgs[0].Value = []byte("abc")
 		_, err = l.Publish(dmsgs)
 		require.NoError(t, err)
@@ -75,7 +76,7 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		dmsgs := []message.Message{msgs[4]}
+		dmsgs := []klevdb.Message{msgs[4]}
 		dmsgs[0].Value = []byte("abc")
 		_, err = l.Publish(dmsgs)
 		require.NoError(t, err)
