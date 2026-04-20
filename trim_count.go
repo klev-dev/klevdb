@@ -1,14 +1,12 @@
-package trim
+package klevdb
 
 import (
 	"context"
-
-	"github.com/klev-dev/klevdb"
 )
 
 // FindByCount returns a set of offsets for messages that when
 // removed will keep the number of messages in the log under max
-func FindByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}, error) {
+func FindByCount(ctx context.Context, l Log, max int) (map[int64]struct{}, error) {
 	stats, err := l.Stat()
 	switch {
 	case err != nil:
@@ -25,7 +23,7 @@ func FindByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}
 	var offsets = map[int64]struct{}{}
 
 	toRemove := stats.Messages - max
-	for offset := klevdb.OffsetOldest; offset < maxOffset && toRemove > 0; {
+	for offset := OffsetOldest; offset < maxOffset && toRemove > 0; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
 			return nil, err
@@ -53,11 +51,11 @@ func FindByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}
 	return offsets, nil
 }
 
-// ByCount tries to remove messages to keep the number of messages
+// TrimByCount tries to remove messages to keep the number of messages
 // in the log under max count.
 //
 // returns the offsets it deleted and the amount of storage freed
-func ByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}, int64, error) {
+func TrimByCount(ctx context.Context, l Log, max int) (map[int64]struct{}, int64, error) {
 	offsets, err := FindByCount(ctx, l, max)
 	if err != nil {
 		return nil, 0, err
@@ -65,11 +63,11 @@ func ByCount(ctx context.Context, l klevdb.Log, max int) (map[int64]struct{}, in
 	return l.Delete(offsets)
 }
 
-// ByCountMulti is similar to ByCount, but will try to remove messages from multiple segments
-func ByCountMulti(ctx context.Context, l klevdb.Log, max int, backoff klevdb.DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+// TrimByCountMulti is similar to ByCount, but will try to remove messages from multiple segments
+func TrimByCountMulti(ctx context.Context, l Log, max int, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
 	offsets, err := FindByCount(ctx, l, max)
 	if err != nil {
 		return nil, 0, err
 	}
-	return klevdb.DeleteMulti(ctx, l, offsets, backoff)
+	return DeleteMulti(ctx, l, offsets, backoff)
 }

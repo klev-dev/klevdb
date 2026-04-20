@@ -1,4 +1,4 @@
-package trim
+package klevdb
 
 import (
 	"context"
@@ -6,15 +6,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/klevdb/pkg/index"
 	"github.com/klev-dev/klevdb/pkg/message"
 )
 
-func TestBySize(t *testing.T) {
+func TestTrimByCount(t *testing.T) {
 	msgs := message.Gen(20)
 
-	l, err := klevdb.Open(t.TempDir(), klevdb.Options{})
+	l, err := Open(t.TempDir(), Options{})
 	require.NoError(t, err)
 	defer l.Close()
 
@@ -23,39 +21,38 @@ func TestBySize(t *testing.T) {
 
 	stat, err := l.Stat()
 	require.NoError(t, err)
-	require.Equal(t, l.Size(msgs[0])*20+message.HeaderSize+index.HeaderSize, stat.Size)
+	require.Equal(t, len(msgs), stat.Messages)
 
-	msg, err := l.Get(klevdb.OffsetOldest)
+	msg, err := l.Get(OffsetOldest)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), msg.Offset)
 
 	t.Run("None", func(t *testing.T) {
-		off, sz, err := BySize(context.TODO(), l, l.Size(msgs[0])*21)
+		off, sz, err := TrimByCount(context.TODO(), l, 21)
 		require.Len(t, off, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), sz)
 
 		stat, err = l.Stat()
 		require.NoError(t, err)
-		require.Equal(t, l.Size(msgs[0])*20+message.HeaderSize+index.HeaderSize, stat.Size)
+		require.Equal(t, len(msgs), stat.Messages)
 
-		msg, err = l.Get(klevdb.OffsetOldest)
+		msg, err = l.Get(OffsetOldest)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), msg.Offset)
 	})
 
 	t.Run("Half", func(t *testing.T) {
-		toTrimSize := l.Size(msgs[0]) * 11
-		off, sz, err := BySize(context.TODO(), l, toTrimSize)
+		off, sz, err := TrimByCount(context.TODO(), l, 10)
 		require.Len(t, off, 10)
 		require.NoError(t, err)
 		require.Equal(t, l.Size(msgs[0])*10, sz)
 
 		stat, err = l.Stat()
 		require.NoError(t, err)
-		require.Equal(t, l.Size(msgs[0])*10+message.HeaderSize+index.HeaderSize, stat.Size)
+		require.Equal(t, 10, stat.Messages)
 
-		msg, err = l.Get(klevdb.OffsetOldest)
+		msg, err = l.Get(OffsetOldest)
 		require.NoError(t, err)
 		require.Equal(t, int64(10), msg.Offset)
 	})
