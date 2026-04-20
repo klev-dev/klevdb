@@ -174,7 +174,7 @@ func benchmarkConsume(b *testing.B, version VersionOptions) {
 				b.StopTimer()
 			})
 
-			b.Run(fmt.Sprintf("RW/%s/%d", c.name, bn), func(b *testing.B) {
+			b.Run(fmt.Sprintf("A/%s/%d", c.name, bn), func(b *testing.B) {
 				dir := MkdirBench(b)
 				defer os.RemoveAll(dir)
 
@@ -290,7 +290,7 @@ func benchmarkGet(b *testing.B, version VersionOptions) {
 		b.StopTimer()
 	})
 
-	b.Run("ByKey", func(b *testing.B) {
+	b.Run("ByKey/W", func(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
@@ -312,7 +312,7 @@ func benchmarkGet(b *testing.B, version VersionOptions) {
 		b.StopTimer()
 	})
 
-	b.Run("ByKey/R", func(b *testing.B) {
+	b.Run("ByKey/A", func(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
@@ -339,7 +339,7 @@ func benchmarkGet(b *testing.B, version VersionOptions) {
 		b.StopTimer()
 	})
 
-	b.Run("ByTime", func(b *testing.B) {
+	b.Run("ByTime/W", func(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 
@@ -361,7 +361,7 @@ func benchmarkGet(b *testing.B, version VersionOptions) {
 		b.StopTimer()
 	})
 
-	b.Run("ByTime/R", func(b *testing.B) {
+	b.Run("ByTime/A", func(b *testing.B) {
 		dir := MkdirBench(b)
 		defer os.RemoveAll(dir)
 

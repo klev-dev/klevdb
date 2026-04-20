@@ -78,72 +78,59 @@ cpu: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
 ### Publish
 ```
 ≻ make bench-publish 
-go test -bench=BenchmarkSingle/Publish -benchmem
-
-BenchmarkSingle/Publish/1/No-8    	  347466	      3337 ns/op	  54.54 MB/s	     156 B/op	       1 allocs/op
-BenchmarkSingle/Publish/1/Times-8 	  391308	      3585 ns/op	  53.00 MB/s	     162 B/op	       1 allocs/op
-BenchmarkSingle/Publish/1/Keys-8  	  314779	      3960 ns/op	  47.98 MB/s	     305 B/op	       7 allocs/op
-BenchmarkSingle/Publish/1/All-8   	  319302	      3907 ns/op	  50.68 MB/s	     310 B/op	       7 allocs/op
-BenchmarkSingle/Publish/8/No-8    	  397518	      3266 ns/op	 445.81 MB/s	     156 B/op	       0 allocs/op
-BenchmarkSingle/Publish/8/Times-8 	  451623	      3402 ns/op	 446.73 MB/s	     161 B/op	       0 allocs/op
-BenchmarkSingle/Publish/8/Keys-8  	  309150	      3821 ns/op	 397.78 MB/s	     298 B/op	       5 allocs/op
-BenchmarkSingle/Publish/8/All-8   	  382129	      3797 ns/op	 417.17 MB/s	     303 B/op	       5 allocs/op
-
-PASS
-ok  	github.com/klev-dev/klevdb	12.433s
+...
+BenchmarkSingle/Publish/V2/1/No-8               575226	      2473 ns/op	  76.82 MB/s	     119 B/op	       0 allocs/op
+BenchmarkSingle/Publish/V2/1/Times-8         	  669390	      2649 ns/op	  74.75 MB/s	     119 B/op	       0 allocs/op
+BenchmarkSingle/Publish/V2/1/Keys-8          	  538255	      2918 ns/op	  67.85 MB/s	     262 B/op	       6 allocs/op
+BenchmarkSingle/Publish/V2/1/All-8           	  515534	      2898 ns/op	  71.08 MB/s	     262 B/op	       6 allocs/op
+BenchmarkSingle/Publish/V2/8/No-8            	  641661	      2531 ns/op	 600.64 MB/s	     150 B/op	       0 allocs/op
+BenchmarkSingle/Publish/V2/8/Times-8         	  674102	      2566 ns/op	 617.35 MB/s	     150 B/op	       0 allocs/op
+BenchmarkSingle/Publish/V2/8/Keys-8          	  583078	      2780 ns/op	 569.76 MB/s	     287 B/op	       5 allocs/op
+BenchmarkSingle/Publish/V2/8/All-8           	  576492	      2738 ns/op	 601.84 MB/s	     287 B/op	       5 allocs/op
+...
 ```
 With default rollover of 1MB, for messages with keys 10B and values 128B:
- * ~300,000 writes/sec, no indexes
- * ~250,000 writes/sec, with all indexes enabled
+ * ~400,000 messages/sec, no indexes
+ * ~350,000 messages/sec, with all indexes enabled
  * scales linearly with the batch size
 
 ### Consume
 ```
 ≻ make bench-consume 
-
-BenchmarkSingle/Consume/W/1-8     	 4372142	       279.5 ns/op	 651.05 MB/s	     224 B/op	       2 allocs/op
-BenchmarkSingle/Consume/RW/1-8    	 4377028	       287.1 ns/op	 633.94 MB/s	     274 B/op	       2 allocs/op
-BenchmarkSingle/Consume/R/1-8     	 4356441	       299.0 ns/op	 608.71 MB/s	     274 B/op	       2 allocs/op
-BenchmarkSingle/Consume/W/8-8     	 6508213	       178.4 ns/op	8163.31 MB/s	     294 B/op	       1 allocs/op
-BenchmarkSingle/Consume/RW/8-8    	 6069168	       194.8 ns/op	7475.85 MB/s	     344 B/op	       1 allocs/op
-BenchmarkSingle/Consume/R/8-8     	 6271984	       196.4 ns/op	7413.22 MB/s	     344 B/op	       1 allocs/op
-
-PASS
-ok  	github.com/klev-dev/klevdb	147.152s
+...
+BenchmarkSingle/Consume/V2/W/No/1-8         	 3940876	       291.1 ns/op	 652.67 MB/s	     256 B/op	       2 allocs/op
+BenchmarkSingle/Consume/V2/W/No/8-8         	10298083	       124.1 ns/op	12248.89 MB/s	     264 B/op	       1 allocs/op
+...
+BenchmarkSingle/Consume/V2/W/All/1-8         	 4214562	       300.9 ns/op	 684.58 MB/s	     256 B/op	       2 allocs/op
+BenchmarkSingle/Consume/V2/W/All/8-8         	 7985094	       163.2 ns/op	10100.82 MB/s	     264 B/op	       1 allocs/op
+...
 ```
 With default rollover of 1MB, for messages with keys 10B and values 128B:
- * ~3,500,000 reads/sec, single message consume
- * ~5,500,000 reads/sec, 8 message batches
+ * ~3,500,000 messages/sec, single message consume
+ * ~8,000,000 messages/sec, in 8 message batch consume
 
 ### Get
 ```
 ≻ make bench-get
-go test -bench=BenchmarkSingle/Get -benchmem
-
-BenchmarkSingle/Get/ByOffset-8         	 5355378	       225.2 ns/op	 808.24 MB/s	     144 B/op	       1 allocs/op
-BenchmarkSingle/Get/ByKey-8            	 1000000	      3583 ns/op	  53.04 MB/s	     152 B/op	       2 allocs/op
-BenchmarkSingle/Get/ByKey/R-8          	 1000000	      3794 ns/op	  50.08 MB/s	     345 B/op	       7 allocs/op
-BenchmarkSingle/Get/ByTime-8           	 1000000	      2197 ns/op	  86.48 MB/s	     144 B/op	       1 allocs/op
-BenchmarkSingle/Get/ByTime/R-8         	 1000000	      2178 ns/op	  87.25 MB/s	     202 B/op	       1 allocs/op
-
-PASS
-ok  	github.com/klev-dev/klevdb	52.528s
+...
+BenchmarkSingle/Get/V2/ByOffset-8         	 3820048	       295.7 ns/op	 642.63 MB/s	     256 B/op	       2 allocs/op
+BenchmarkSingle/Get/V2/ByKey/W-8          	 1000000	      3363 ns/op	  58.88 MB/s	     264 B/op	       3 allocs/op
+BenchmarkSingle/Get/V2/ByKey/A-8          	 1000000	      3634 ns/op	  54.49 MB/s	     456 B/op	       8 allocs/op
+BenchmarkSingle/Get/V2/ByTime/W-8         	 1000000	      2499 ns/op	  79.24 MB/s	     256 B/op	       2 allocs/op
+BenchmarkSingle/Get/V2/ByTime/A-8         	 1000000	      2374 ns/op	  83.42 MB/s	     313 B/op	       2 allocs/op
+...
 ```
 With default rollover of 1MB, for messages with keys 10B and values 128B:
- * ~4,400,000 gets/sec, across all offsets
- * ~270,000 key reads/sec, across all keys
- * ~450,000 time reads/sec, across all times
+ * ~3,300,000 gets/sec, across all offsets
+ * ~290,000 key reads/sec, across all keys
+ * ~420,000 time reads/sec, across all times
 
 ### Multi
 ```
 ≻ make bench-multi
-go test -bench=BenchmarkMulti -benchmem
-
-BenchmarkMulti/Base-8         	  282462	      4433 ns/op	     673 B/op	       7 allocs/op
-BenchmarkMulti/Publish-8      	   30628	     40717 ns/op	  19.45 MB/s	    2974 B/op	      56 allocs/op
-BenchmarkMulti/Consume-8      	 1289114	       909.9 ns/op	 835.24 MB/s	    2842 B/op	      17 allocs/op
-BenchmarkMulti/GetKey-8       	  459753	      5729 ns/op	  34.56 MB/s	    1520 B/op	      20 allocs/op
-
-PASS
-ok  	github.com/klev-dev/klevdb	22.973s
+BenchmarkMulti/Base/V2-8      	  442836	      3155 ns/op	                   570 B/op	       6 allocs/op
+BenchmarkMulti/Publish/V2-8   	   45343	     26558 ns/op	  31.03 MB/s	    2807 B/op	      56 allocs/op
+BenchmarkMulti/Consume/V2-8   	 1707186	     681.4 ns/op	1162.23 MB/s	    2559 B/op	      12 allocs/op
+BenchmarkMulti/GetKey/V2-8    	  288034	      4286 ns/op	  48.06 MB/s	    2640 B/op	      30 allocs/op
+...
 ```
