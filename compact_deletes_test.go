@@ -1,4 +1,4 @@
-package compact
+package klevdb
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/klevdb/pkg/message"
 )
 
@@ -16,32 +15,32 @@ func TestDeletes(t *testing.T) {
 	msgs := message.Gen(5)
 
 	t.Run("Empty", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
-		off, cmp, err := Deletes(context.TODO(), l, time.Now())
+		off, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Empty(t, off)
 		require.Equal(t, int64(0), cmp)
 	})
 
 	t.Run("None", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		off, cmp, err := Deletes(context.TODO(), l, time.Now())
+		off, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Empty(t, off)
 		require.Equal(t, int64(0), cmp)
 	})
 
 	t.Run("Dups", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
@@ -56,7 +55,7 @@ func TestDeletes(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		off, cmp, err := Deletes(context.TODO(), l, time.Now())
+		off, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Len(t, off, 5)
 		for i := range nmsgs {

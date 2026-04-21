@@ -1,4 +1,4 @@
-package compact
+package klevdb
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/klevdb/pkg/message"
 )
 
@@ -16,25 +15,25 @@ func TestUpdates(t *testing.T) {
 	msgs := message.Gen(5)
 
 	t.Run("Empty", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
-		off, cmp, err := Updates(context.TODO(), l, time.Now())
+		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Empty(t, off)
 		require.Equal(t, int64(0), cmp)
 	})
 
 	t.Run("None", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		off, cmp, err := Updates(context.TODO(), l, time.Now())
+		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Empty(t, off)
 		require.Equal(t, int64(0), cmp)
@@ -45,19 +44,19 @@ func TestUpdates(t *testing.T) {
 	})
 
 	t.Run("First", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		dmsgs := []klevdb.Message{msgs[0]}
+		dmsgs := []Message{msgs[0]}
 		dmsgs[0].Value = []byte("abc")
 		_, err = l.Publish(dmsgs)
 		require.NoError(t, err)
 
-		off, cmp, err := Updates(context.TODO(), l, time.Now())
+		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Len(t, off, 1)
 		require.Contains(t, off, int64(0))
@@ -69,19 +68,19 @@ func TestUpdates(t *testing.T) {
 	})
 
 	t.Run("Last", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		dmsgs := []klevdb.Message{msgs[4]}
+		dmsgs := []Message{msgs[4]}
 		dmsgs[0].Value = []byte("abc")
 		_, err = l.Publish(dmsgs)
 		require.NoError(t, err)
 
-		off, cmp, err := Updates(context.TODO(), l, time.Now())
+		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Len(t, off, 1)
 		require.Contains(t, off, int64(4))
@@ -93,7 +92,7 @@ func TestUpdates(t *testing.T) {
 	})
 
 	t.Run("Multi", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
@@ -103,7 +102,7 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		off, cmp, err := Updates(context.TODO(), l, time.Now())
+		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Len(t, off, len(msgs))
 		for i := range msgs {
@@ -117,7 +116,7 @@ func TestUpdates(t *testing.T) {
 	})
 
 	t.Run("Time", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
@@ -131,7 +130,7 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(nmsgs)
 		require.NoError(t, err)
 
-		off, cmp, err := Updates(context.TODO(), l, nmsgs[2].Time)
+		off, cmp, err := CompactUpdates(context.TODO(), l, nmsgs[2].Time)
 		require.NoError(t, err)
 		require.Len(t, off, 3)
 		for i := range 3 {
@@ -145,21 +144,21 @@ func TestUpdates(t *testing.T) {
 	})
 
 	t.Run("NilKey", func(t *testing.T) {
-		l, err := klevdb.Open(t.TempDir(), klevdb.Options{KeyIndex: true})
+		l, err := Open(t.TempDir(), Options{KeyIndex: true})
 		require.NoError(t, err)
 		defer l.Close()
 
-		_, err = l.Publish([]klevdb.Message{
+		_, err = l.Publish([]Message{
 			{Key: []byte("x")},
 			{},
 			{},
 		})
 		require.NoError(t, err)
 
-		off, cmp, err := Updates(context.TODO(), l, time.Now())
+		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
 		require.NoError(t, err)
 		require.Len(t, off, 1)
 		require.Contains(t, off, int64(1))
-		require.Equal(t, l.Size(klevdb.Message{}), cmp)
+		require.Equal(t, l.Size(Message{}), cmp)
 	})
 }

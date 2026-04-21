@@ -1,12 +1,10 @@
-package compact
+package klevdb
 
 import (
 	"context"
 	"time"
 
 	art "github.com/plar/go-adaptive-radix-tree/v2"
-
-	"github.com/klev-dev/klevdb"
 )
 
 // FindUpdates returns a set of offsets for messages that have
@@ -14,7 +12,7 @@ import (
 //
 // Messages before the last one for a given key are considered updates
 // that are no longer relevant, and therefore are eligible for deletion.
-func FindUpdates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, error) {
+func FindUpdates(ctx context.Context, l Log, before time.Time) (map[int64]struct{}, error) {
 	maxOffset, err := l.NextOffset()
 	if err != nil {
 		return nil, err
@@ -24,7 +22,7 @@ func FindUpdates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64
 	var offsets = map[int64]struct{}{}
 
 SEARCH:
-	for offset := klevdb.OffsetOldest; offset < maxOffset; {
+	for offset := OffsetOldest; offset < maxOffset; {
 		nextOffset, msgs, err := l.Consume(offset, 32)
 		if err != nil {
 			return nil, err
@@ -60,7 +58,7 @@ SEARCH:
 // leaving only the current value (last update) for a key.
 //
 // returns the offsets it deleted and the amount of storage freed
-func Updates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]struct{}, int64, error) {
+func CompactUpdates(ctx context.Context, l Log, before time.Time) (map[int64]struct{}, int64, error) {
 	offsets, err := FindUpdates(ctx, l, before)
 	if err != nil {
 		return nil, 0, err
@@ -69,10 +67,10 @@ func Updates(ctx context.Context, l klevdb.Log, before time.Time) (map[int64]str
 }
 
 // UpdatesMulti is similar to Updates, but will try to remove messages from multiple segments
-func UpdatesMulti(ctx context.Context, l klevdb.Log, before time.Time, backoff klevdb.DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+func CompactUpdatesMulti(ctx context.Context, l Log, before time.Time, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
 	offsets, err := FindUpdates(ctx, l, before)
 	if err != nil {
 		return nil, 0, err
 	}
-	return klevdb.DeleteMulti(ctx, l, offsets, backoff)
+	return DeleteMulti(ctx, l, offsets, backoff)
 }
