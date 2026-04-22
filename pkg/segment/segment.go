@@ -67,9 +67,6 @@ func (s Segment) Stat(params index.Params) (Stats, error) {
 	}, nil
 }
 
-var errIndexSize = fmt.Errorf("%w: incorrect size", index.ErrCorrupted)
-var errIndexItem = fmt.Errorf("%w: incorrect item", index.ErrCorrupted)
-
 func (s Segment) Check(params index.Params) error {
 	log, err := message.OpenReader(s.Log, s.Offset)
 	if err != nil {
@@ -79,7 +76,7 @@ func (s Segment) Check(params index.Params) error {
 
 	var position = log.InitialPosition()
 	var indexTime int64
-	var logIndex []index.Item
+	var checkIndex []index.Item
 	for {
 		msg, nextPosition, err := log.Read(position)
 		if errors.Is(err, io.EOF) {
@@ -89,7 +86,7 @@ func (s Segment) Check(params index.Params) error {
 		}
 
 		item := params.NewItem(msg, position, indexTime)
-		logIndex = append(logIndex, item)
+		checkIndex = append(checkIndex, item)
 
 		position = nextPosition
 		indexTime = item.Timestamp
@@ -100,14 +97,8 @@ func (s Segment) Check(params index.Params) error {
 		return nil
 	case err != nil:
 		return err
-	case len(logIndex) != len(items):
-		return errIndexSize
-	default:
-		for i, item := range logIndex {
-			if item != items[i] {
-				return errIndexItem
-			}
-		}
+	case !slices.Equal(checkIndex, items):
+		return index.ErrCorrupted
 	}
 
 	return nil
@@ -170,6 +161,7 @@ func (s Segment) Recover(params index.Params) error {
 	}
 
 	var corruptedIndex = false
+	var indexVersion = index.VUnknown
 	switch items, err := index.Read(s.Index, s.Offset, params); {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
@@ -178,12 +170,18 @@ func (s Segment) Recover(params index.Params) error {
 	case err != nil:
 		return err
 	case !slices.Equal(items, restoreIndex):
+		indexVersion, _ = index.GetVersion(s.Index, s.Offset, params)
 		corruptedIndex = true
 	}
 
 	if corruptedIndex {
 		if err := os.Remove(s.Index); err != nil {
 			return fmt.Errorf("restore index delete: %w", err)
+		}
+		if indexVersion != index.VUnknown {
+			if err := index.Write(s.Index, s.Offset, indexVersion, params, restoreIndex); err != nil {
+				return fmt.Errorf("restore index write: %w", err)
+			}
 		}
 	}
 

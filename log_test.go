@@ -1524,10 +1524,10 @@ func TestConcurrent(t *testing.T) {
 func testConcurrentPubsubRecent(t *testing.T) {
 	defer os.RemoveAll("test_pubsub")
 	s, err := Open("test_pubsub", Options{
-		CreateDirs: true,
-		AutoSync:   true,
-		Check:      true,
-		Rollover:   1024 * 64,
+		CreateDirs:      true,
+		AutoSync:        true,
+		CheckAndRecover: true,
+		Rollover:        1024 * 64,
 	})
 	require.NoError(t, err)
 	defer s.Close()

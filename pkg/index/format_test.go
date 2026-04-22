@@ -67,8 +67,9 @@ func TestInvalidHeader(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	_, err = Read(path, 0, iopts)
+	got, err := Read(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
+	require.Empty(t, got)
 }
 
 func TestPartialIndexHeader(t *testing.T) {
@@ -80,8 +81,9 @@ func TestPartialIndexHeader(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	_, err = Read(path, 0, iopts)
+	got, err := Read(path, 0, iopts)
 	require.ErrorIs(t, err, ErrCorrupted)
+	require.Empty(t, got)
 }
 
 func TestStat(t *testing.T) {

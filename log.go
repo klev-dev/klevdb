@@ -15,11 +15,13 @@ import (
 	"github.com/klev-dev/klevdb/pkg/segment"
 )
 
-var errNoKeyIndex = fmt.Errorf("%w by key", ErrNoIndex)
-var errKeyNotFound = fmt.Errorf("key %w", message.ErrNotFound)
-var errNoTimeIndex = fmt.Errorf("%w by time", ErrNoIndex)
-var errTimeNotFound = fmt.Errorf("time %w", message.ErrNotFound)
-var errDeleteRelative = fmt.Errorf("%w: delete relative offsets", message.ErrInvalidOffset)
+var (
+	errNoKeyIndex     = fmt.Errorf("%w by key", ErrNoIndex)
+	errKeyNotFound    = fmt.Errorf("key %w", message.ErrNotFound)
+	errNoTimeIndex    = fmt.Errorf("%w by time", ErrNoIndex)
+	errTimeNotFound   = fmt.Errorf("time %w", message.ErrNotFound)
+	errDeleteRelative = fmt.Errorf("%w: delete relative offsets", message.ErrInvalidOffset)
+)
 
 // Open opens or creates a [Log] based on a dir and set of options
 func Open(dir string, opts Options) (result Log, err error) {
@@ -71,27 +73,38 @@ func Open(dir string, opts Options) (result Log, err error) {
 
 	segments, err := segment.Find(dir, opts.AutoSync)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open find segments: %w", err)
 	}
 
-	if len(segments) == 0 {
-		if opts.Readonly {
-			ix := newReaderIndex(nil, params.Keys, 0, true)
-			rdr := reopenReader(segment.New(dir, 0, opts.AutoSync), params, opts.Version.NewSegmentsVersion, ix)
-			l.readers = []*reader{rdr}
-		} else {
-			w, err := openWriter(segment.New(dir, 0, opts.AutoSync), params, opts.Version.NewSegmentsVersion, 0)
-			if err != nil {
-				return nil, err
-			}
-			l.writer = w
-			l.readers = []*reader{w.reader}
-		}
-	} else {
-		if opts.Check {
+	switch {
+	case opts.Readonly && len(segments) == 0:
+		ix := newReaderIndex(nil, params.Keys, 0, true)
+		rdr := reopenReader(segment.New(dir, 0, opts.AutoSync), params, opts.Version.NewSegmentsVersion, ix)
+		l.readers = []*reader{rdr}
+	case opts.Readonly:
+		if opts.CheckAndRecover {
 			head := segments[len(segments)-1]
 			if err := head.Check(params); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("open check: %w", err)
+			}
+		}
+
+		for i, seg := range segments {
+			rdr := openReader(seg, params, opts.Version.NewSegmentsVersion, i == len(segments)-1)
+			l.readers = append(l.readers, rdr)
+		}
+	case len(segments) == 0:
+		w, err := openWriter(segment.New(dir, 0, opts.AutoSync), params, opts.Version.NewSegmentsVersion, 0)
+		if err != nil {
+			return nil, fmt.Errorf("open new writer: %w", err)
+		}
+		l.writer = w
+		l.readers = []*reader{w.reader}
+	default:
+		if opts.CheckAndRecover {
+			head := segments[len(segments)-1]
+			if err := head.Recover(params); err != nil {
+				return nil, fmt.Errorf("open recover: %w", err)
 			}
 		}
 
@@ -109,17 +122,12 @@ func Open(dir string, opts Options) (result Log, err error) {
 			l.readers = append(l.readers, rdr)
 		}
 
-		if opts.Readonly {
-			rdr := openReader(head, params, opts.Version.NewSegmentsVersion, true)
-			l.readers = append(l.readers, rdr)
-		} else {
-			wrt, err := openWriter(head, params, opts.Version.NewSegmentsVersion, 0)
-			if err != nil {
-				return nil, err
-			}
-			l.writer = wrt
-			l.readers = append(l.readers, wrt.reader)
+		wrt, err := openWriter(head, params, opts.Version.NewSegmentsVersion, 0)
+		if err != nil {
+			return nil, fmt.Errorf("open writer: %w", err)
 		}
+		l.writer = wrt
+		l.readers = append(l.readers, wrt.reader)
 	}
 
 	return l, nil

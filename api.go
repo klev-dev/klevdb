@@ -55,8 +55,8 @@ type Options struct {
 	AutoSync bool
 	// At what segment size it will rollover to a new segment. Defaults to 1MB.
 	Rollover int64
-	// Check the head segment for integrity, before opening it for reading/writing.
-	Check bool
+	// CheckAndRecover check the head segment for integrity. If it fails in write mode will recover the data.
+	CheckAndRecover bool
 	// Upgrade specifies how to upgrade the versions
 	Version VersionOptions
 }

@@ -366,38 +366,52 @@ func Read(path string, offset int64, opts Params) ([]Item, error) {
 	return items, nil
 }
 
-func Stat(path string, offset int64, opts Params) (int64, int, error) {
+func detect(path string, offset int64, opts Params) (Version, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return -1, -1, fmt.Errorf("read index open: %w", err)
+		return VUnknown, -1, fmt.Errorf("read index open: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
 	stat, err := os.Stat(path)
 	if err != nil {
-		return -1, -1, fmt.Errorf("read index stat: %w", err)
+		return VUnknown, -1, fmt.Errorf("read index stat: %w", err)
 	}
 	dataSize := stat.Size()
 
 	if dataSize == 0 {
-		return dataSize, 0, nil
+		return V1, 0, nil
 	}
 
 	var h [HeaderSize]byte
 	if _, err := io.ReadFull(f, h[:]); err != nil {
-		return -1, -1, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
+		return VUnknown, -1, fmt.Errorf("%w: reading header: %w", ErrCorrupted, err)
 	}
 	v, err := headerParse(h[:], offset, opts)
 	if err != nil {
-		return -1, -1, fmt.Errorf("parse index header: %w", err)
+		return VUnknown, -1, fmt.Errorf("parse index header: %w", err)
 	}
 
-	switch v {
+	return v, dataSize, nil
+}
+
+func GetVersion(path string, offset int64, opts Params) (Version, error) {
+	version, _, err := detect(path, offset, opts)
+	return version, err
+}
+
+func Stat(path string, offset int64, opts Params) (int64, int, error) {
+	version, dataSize, err := detect(path, offset, opts)
+	if err != nil {
+		return -1, -1, fmt.Errorf("index stat: %w", err)
+	}
+
+	switch version {
 	case V1:
 		return dataSize, int(dataSize / opts.Size()), nil
 	case V2:
-		return dataSize, int((dataSize - int64(len(h))) / opts.Size()), nil
+		return dataSize, int((dataSize - HeaderSize) / opts.Size()), nil
 	default:
-		return -1, -1, fmt.Errorf("%w: unknown version %d", ErrCorrupted, v.marker)
+		return -1, -1, fmt.Errorf("%w: unknown version %d", ErrCorrupted, version)
 	}
 }
