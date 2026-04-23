@@ -82,7 +82,7 @@ func Open(dir string, opts Options) (result Log, err error) {
 		rdr := reopenReader(segment.New(dir, 0, opts.AutoSync), params, opts.Version.NewSegmentsVersion, ix)
 		l.readers = []*reader{rdr}
 	case opts.Readonly:
-		if opts.CheckAndRecover {
+		if opts.Check || opts.Recover {
 			head := segments[len(segments)-1]
 			if err := head.Check(params); err != nil {
 				return nil, fmt.Errorf("open check: %w", err)
@@ -101,10 +101,16 @@ func Open(dir string, opts Options) (result Log, err error) {
 		l.writer = w
 		l.readers = []*reader{w.reader}
 	default:
-		if opts.CheckAndRecover {
+		switch {
+		case opts.Recover:
 			head := segments[len(segments)-1]
 			if err := head.Recover(params); err != nil {
 				return nil, fmt.Errorf("open recover: %w", err)
+			}
+		case opts.Check:
+			head := segments[len(segments)-1]
+			if err := head.Check(params); err != nil {
+				return nil, fmt.Errorf("open check: %w", err)
 			}
 		}
 
