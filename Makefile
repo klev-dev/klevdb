@@ -28,7 +28,7 @@ bench-get:
 	go test -bench=BenchmarkSingle/Get/V2 -benchmem -run XXX
 
 bench-multi:
-	go test -bench=BenchmarkMulti/V2 -benchmem -run XXX
+	go test -bench=BenchmarkMulti//V2 -benchmem -run XXX
 
 bench-keys:
 	go test -bench=BenchmarkKeys -benchmem -run XXX
