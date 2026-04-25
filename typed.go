@@ -181,6 +181,10 @@ func (l *tlog[K, V]) GetByTime(start time.Time) (TMessage[K, V], error) {
 
 func (l *tlog[K, V]) Delete(offsets map[int64]struct{}) ([]TMessage[K, V], int64, error) {
 	messages, sz, err := l.Log.Delete(offsets)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	tmessages := make([]TMessage[K, V], len(messages))
 	for i, msg := range messages {
 		tmessages[i], err = l.decode(msg)
