@@ -122,7 +122,7 @@ func (r *reader) Consume(offset, maxCount int64) (int64, []message.Message, erro
 	return msgs[len(msgs)-1].Offset + 1, msgs, nil
 }
 
-func (r *reader) ConsumeByKey(key, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
+func (r *reader) ConsumeByKey(key []byte, keyHash []byte, offset, maxCount int64) (int64, []message.Message, error) {
 	ix, err := r.getIndexNow()
 	if err != nil {
 		return OffsetInvalid, nil, err
@@ -204,7 +204,7 @@ func (r *reader) Get(offset int64) (message.Message, error) {
 	return messages.Get(position)
 }
 
-func (r *reader) GetByKey(key, keyHash []byte, tctx int64) (message.Message, error) {
+func (r *reader) GetByKey(key []byte, keyHash []byte, tctx int64) (message.Message, error) {
 	ix, err := r.getIndexAt(tctx)
 	if err != nil {
 		return message.Invalid, err

@@ -31,8 +31,7 @@ bench-multi:
 	go test -bench=BenchmarkMulti/V2 -benchmem -run XXX
 
 bench-keys:
-	go test -bench=//V2//Keys -benchmem -run XXX
-	go test -bench=//V2/Key -benchmem -run XXX
+	go test -bench=BenchmarkKeys -benchmem -run XXX
 
 .PHONY: update-libs
 update-libs:
