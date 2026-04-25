@@ -24,24 +24,28 @@ func KeyHashEncoded(h uint64) []byte {
 	return hash
 }
 
+type keyPositions struct {
+	positions []int64
+}
+
 func AppendKeys(keys art.Tree, items []Item) {
 	hash := make([]byte, 8)
 	for _, item := range items {
 		binary.BigEndian.PutUint64(hash, item.KeyHash)
 
-		var positions []int64
 		if v, found := keys.Search(hash); found {
-			positions = v.([]int64)
+			kp := v.(*keyPositions)
+			kp.positions = append(kp.positions, item.Position)
+		} else {
+			keys.Insert(hash, &keyPositions{[]int64{item.Position}})
 		}
-		positions = append(positions, item.Position)
-
-		keys.Insert(hash, positions)
 	}
 }
 
 func Keys(keys art.Tree, keyHash []byte) ([]int64, error) {
 	if v, found := keys.Search(keyHash); found {
-		return v.([]int64), nil
+		kp := v.(*keyPositions)
+		return kp.positions, nil
 	}
 
 	return nil, ErrKeyNotFound
