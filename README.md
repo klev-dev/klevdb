@@ -134,3 +134,12 @@ BenchmarkMulti/Consume/V2-8   	 1707186	     681.4 ns/op	1162.23 MB/s	    2559 B
 BenchmarkMulti/GetKey/V2-8    	  288034	      4286 ns/op	  48.06 MB/s	    2640 B/op	      30 allocs/op
 ...
 ```
+
+## Future ideas
+
+ - cmd to interact with logs
+ - unified key index - an index across all segments
+ - unified time index - across all segments
+ - lightweight logs - delay opening the writer
+ - multi index store
+ - remove interfaces
