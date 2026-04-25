@@ -28,14 +28,15 @@ func TestDeleteMulti(t *testing.T) {
 	require.Equal(t, 10, stats.Messages)
 	require.Equal(t, 5, stats.Segments)
 
-	offsets, sz, err := DeleteMulti(context.TODO(), l, map[int64]struct{}{
+	msgs, sz, err := DeleteMulti(context.TODO(), l, map[int64]struct{}{
 		0: {},
 		2: {},
 		3: {},
 		4: {},
 	}, DeleteMultiWithWait(time.Millisecond))
 	require.NoError(t, err)
-	require.Len(t, offsets, 4)
+	require.Len(t, msgs, 4)
+	offsets := getOffsets(msgs)
 	require.Contains(t, offsets, int64(0))
 	require.Contains(t, offsets, int64(2))
 	require.Contains(t, offsets, int64(3))

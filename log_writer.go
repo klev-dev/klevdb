@@ -112,7 +112,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 		return nil, nil, err
 	}
 
-	if len(rs.SurviveOffsets)+len(rs.DeletedOffsets) != w.index.Len() {
+	if len(rs.SurviveOffsets)+len(rs.DeletedMessages) != w.index.Len() {
 		// the number of messages changed, nothing to drop
 		if err := rs.Remove(); err != nil {
 			return nil, nil, err
@@ -155,7 +155,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 
 		// first move the replacement
 		nextOffset, nextTime := w.index.getNext()
-		if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
+		if rs.DeletedMessages[len(rs.DeletedMessages)-1].Offset == w.index.getLastOffset() {
 			rdr := openReader(nseg, w.params, w.version, false)
 			wrt, err := openWriter(w.segment.NewAt(nextOffset), w.params, w.version, nextTime)
 			return wrt, rdr, err
@@ -170,7 +170,7 @@ func (w *writer) Delete(rs *segment.RewriteSegment) (*writer, *reader, error) {
 	}
 
 	nextOffset, nextTime := w.index.getNext()
-	if _, ok := rs.DeletedOffsets[w.index.getLastOffset()]; ok {
+	if rs.DeletedMessages[len(rs.DeletedMessages)-1].Offset == w.index.getLastOffset() {
 		rdr := openReader(w.segment, w.params, w.version, false)
 		wrt, err := openWriter(w.segment.NewAt(nextOffset), w.params, w.version, nextTime)
 		return wrt, rdr, err

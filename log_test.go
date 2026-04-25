@@ -1155,11 +1155,12 @@ func testDeleteReaderPartial(t *testing.T) {
 	require.Equal(t, 4, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		0: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 1)
+	require.Len(t, deletedMsgs, 1)
 	require.Contains(t, offsets, int64(0))
 	require.Equal(t, l.Size(msgs[0]), sz)
 
@@ -1208,9 +1209,10 @@ func testDeleteReaderPartialReload(t *testing.T) {
 	require.Equal(t, 4, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		0: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, offsets, 1)
 	require.Contains(t, offsets, int64(0))
@@ -1251,12 +1253,13 @@ func testDeleteReaderFull(t *testing.T) {
 	require.Equal(t, 4, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		0: {},
 		1: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 2)
+	require.Len(t, deletedMsgs, 2)
 	require.Contains(t, offsets, int64(0))
 	require.Contains(t, offsets, int64(1))
 	require.Equal(t, l.Size(msgs[0])*2, sz)
@@ -1290,12 +1293,13 @@ func testDeleteWriterSingle(t *testing.T) {
 	require.Equal(t, 4, stats.Messages)
 	require.Equal(t, 1, stats.Segments)
 
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		0: {},
 		1: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 2)
+	require.Len(t, deletedMsgs, 2)
 	require.Contains(t, offsets, int64(0))
 	require.Contains(t, offsets, int64(1))
 	require.Equal(t, l.Size(msgs[0])*2, sz)
@@ -1332,9 +1336,10 @@ func testDeleteWriterLast(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(4), nextOffset)
 
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		3: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, offsets, 1)
 	require.Contains(t, offsets, int64(3))
@@ -1378,11 +1383,12 @@ func testDeleteWriterPartial(t *testing.T) {
 	require.Equal(t, 4, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		2: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 1)
+	require.Len(t, deletedMsgs, 1)
 	require.Contains(t, offsets, int64(2))
 	require.Equal(t, l.Size(msgs[0]), sz)
 
@@ -1423,12 +1429,13 @@ func testDeleteWriterFull(t *testing.T) {
 	require.Equal(t, 4, stats.Messages)
 	require.Equal(t, 2, stats.Segments)
 
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		2: {},
 		3: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 2)
+	require.Len(t, deletedMsgs, 2)
 	require.Contains(t, offsets, int64(2))
 	require.Contains(t, offsets, int64(3))
 	require.Equal(t, l.Size(msgs[0])*2, sz)
@@ -1472,23 +1479,25 @@ func testDeleteAll(t *testing.T) {
 	publishBatched(t, l, msgs, 1)
 
 	// delete the writer segment
-	offsets, sz, err := l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		2: {},
 		3: {},
 	})
+	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 2)
+	require.Len(t, deletedMsgs, 2)
 	require.Contains(t, offsets, int64(2))
 	require.Contains(t, offsets, int64(3))
 	require.Equal(t, l.Size(msgs[0])*2, sz)
 
 	// delete the reader segment
-	offsets, sz, err = l.Delete(map[int64]struct{}{
+	deletedMsgs, sz, err = l.Delete(map[int64]struct{}{
 		0: {},
 		1: {},
 	})
+	offsets = getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 2)
+	require.Len(t, deletedMsgs, 2)
 	require.Contains(t, offsets, int64(0))
 	require.Contains(t, offsets, int64(1))
 	require.Equal(t, l.Size(msgs[0])*2, sz)

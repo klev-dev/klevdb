@@ -286,6 +286,7 @@ func (s Segment) Migrate(mversion message.Version, iversion index.Version, param
 	defer func() { _ = oldLog.Close() }()
 
 	if oldLog.Version() == mversion {
+		// TODO support index only rewrites
 		return nil
 	}
 
@@ -408,8 +409,9 @@ type RewriteSegment struct {
 	Stats Stats
 
 	SurviveOffsets map[int64]struct{}
-	DeletedOffsets map[int64]struct{}
-	DeletedSize    int64
+	// DeletedOffsets map[int64]struct{}
+	DeletedMessages []message.Message
+	DeletedSize     int64
 }
 
 func (r *RewriteSegment) GetNewSegment() Segment {
@@ -427,7 +429,6 @@ func (s Segment) forRewrite() (*RewriteSegment, error) {
 		Segment: s.NewAt(s.Offset),
 
 		SurviveOffsets: map[int64]struct{}{},
-		DeletedOffsets: map[int64]struct{}{},
 	}
 
 	dst.Log = fmt.Sprintf("%s.rewrite.%s", s.Log, randStr)
@@ -469,7 +470,7 @@ func (src Segment) Rewrite(dropOffsets map[int64]struct{}, params index.Params, 
 		}
 
 		if _, ok := dropOffsets[msg.Offset]; ok {
-			dst.DeletedOffsets[msg.Offset] = struct{}{}
+			dst.DeletedMessages = append(dst.DeletedMessages, msg)
 			dst.DeletedSize += message.Size(msg, srcVersion) + params.Size()
 		} else {
 			dstPosition, err := dstLog.Write(msg)

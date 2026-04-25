@@ -145,8 +145,8 @@ type Log interface {
 	// Delete tries to delete a set of messages by their offset
 	//   from the log and returns the amount of storage deleted
 	// It does not guarantee that it will delete all messages,
-	//   it returns the set of actually deleted offsets.
-	Delete(offsets map[int64]struct{}) (deletedOffsets map[int64]struct{}, deletedSize int64, err error)
+	//   it returns list of actually deleted messages.
+	Delete(offsets map[int64]struct{}) (deletedMessages []Message, deletedSize int64, err error)
 
 	// Size returns the amount of storage a message occupies in the
 	// NewSegmentsVersion format (see VersionOptions), plus the index overhead.
@@ -201,6 +201,7 @@ func Recover(dir string, opts Options) error {
 	})
 }
 
+// Migrate rewrites all segments with a concrete options and version
 func Migrate(dir string, opts Options, version Version) error {
 	if version == vUnknown {
 		return fmt.Errorf("migrate: version must be specified (e.g. klevdb.V2)")

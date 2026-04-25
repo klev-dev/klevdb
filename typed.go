@@ -42,7 +42,7 @@ type TLog[K any, V any] interface {
 	OffsetByTime(start time.Time) (offset int64, messageTime time.Time, err error)
 
 	// Delete see [Log.Delete]
-	Delete(offsets map[int64]struct{}) (deletedOffsets map[int64]struct{}, deletedSize int64, err error)
+	Delete(offsets map[int64]struct{}) (deletedMessages []TMessage[K, V], deletedSize int64, err error)
 
 	// Size see [Log.Size]
 	Size(m Message) int64
@@ -177,6 +177,18 @@ func (l *tlog[K, V]) GetByTime(start time.Time) (TMessage[K, V], error) {
 		return TMessage[K, V]{Offset: OffsetInvalid}, err
 	}
 	return l.decode(msg)
+}
+
+func (l *tlog[K, V]) Delete(offsets map[int64]struct{}) ([]TMessage[K, V], int64, error) {
+	messages, sz, err := l.Log.Delete(offsets)
+	tmessages := make([]TMessage[K, V], len(messages))
+	for i, msg := range messages {
+		tmessages[i], err = l.decode(msg)
+		if err != nil {
+			return nil, sz, err
+		}
+	}
+	return tmessages, sz, nil
 }
 
 func (l *tlog[K, V]) Raw() Log {

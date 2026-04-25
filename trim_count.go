@@ -55,7 +55,7 @@ func FindByCount(ctx context.Context, l Log, max int) (map[int64]struct{}, error
 // in the log under max count.
 //
 // returns the offsets it deleted and the amount of storage freed
-func TrimByCount(ctx context.Context, l Log, max int) (map[int64]struct{}, int64, error) {
+func TrimByCount(ctx context.Context, l Log, max int) ([]Message, int64, error) {
 	offsets, err := FindByCount(ctx, l, max)
 	if err != nil {
 		return nil, 0, err
@@ -64,7 +64,7 @@ func TrimByCount(ctx context.Context, l Log, max int) (map[int64]struct{}, int64
 }
 
 // TrimByCountMulti is similar to ByCount, but will try to remove messages from multiple segments
-func TrimByCountMulti(ctx context.Context, l Log, max int, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+func TrimByCountMulti(ctx context.Context, l Log, max int, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindByCount(ctx, l, max)
 	if err != nil {
 		return nil, 0, err

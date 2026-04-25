@@ -53,7 +53,7 @@ func FindByOffset(ctx context.Context, l Log, before int64) (map[int64]struct{},
 // TrimByOffset tries to remove the messages at the start of the log before offset
 //
 // returns the offsets it deleted and the amount of storage freed
-func TrimByOffset(ctx context.Context, l Log, before int64) (map[int64]struct{}, int64, error) {
+func TrimByOffset(ctx context.Context, l Log, before int64) ([]Message, int64, error) {
 	offsets, err := FindByOffset(ctx, l, before)
 	if err != nil {
 		return nil, 0, err
@@ -62,7 +62,7 @@ func TrimByOffset(ctx context.Context, l Log, before int64) (map[int64]struct{},
 }
 
 // TrimByOffsetMulti is similar to ByOffset, but will try to remove messages from multiple segments
-func TrimByOffsetMulti(ctx context.Context, l Log, before int64, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+func TrimByOffsetMulti(ctx context.Context, l Log, before int64, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindByOffset(ctx, l, before)
 	if err != nil {
 		return nil, 0, err

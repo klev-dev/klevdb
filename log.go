@@ -358,7 +358,7 @@ func (l *log) OffsetByTime(start time.Time) (int64, time.Time, error) {
 	return msg.Offset, msg.Time, nil
 }
 
-func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, error) {
+func (l *log) Delete(offsets map[int64]struct{}) ([]Message, int64, error) {
 	if l.opts.Readonly {
 		return nil, 0, ErrReadonly
 	}
@@ -373,7 +373,7 @@ func (l *log) Delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	return l.delete(offsets)
 }
 
-func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, error) {
+func (l *log) delete(offsets map[int64]struct{}) ([]Message, int64, error) {
 	rdr, err := l.findDeleteReader(offsets)
 	if err != nil {
 		return nil, 0, err
@@ -418,7 +418,7 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 		return nil, 0, err
 	}
 
-	if len(rs.DeletedOffsets) == 0 {
+	if len(rs.DeletedMessages) == 0 {
 		// deleted nothing, just remove rewrite files
 		return nil, 0, rs.Remove()
 	}
@@ -447,7 +447,7 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 			l.readers = append(l.readers, newWriter.reader)
 		}
 
-		return rs.DeletedOffsets, rs.DeletedSize, nil
+		return rs.DeletedMessages, rs.DeletedSize, nil
 	}
 	l.writerMu.Unlock()
 
@@ -480,7 +480,7 @@ func (l *log) delete(offsets map[int64]struct{}) (map[int64]struct{}, int64, err
 	}
 	l.readers = newReaders
 
-	return rs.DeletedOffsets, rs.DeletedSize, nil
+	return rs.DeletedMessages, rs.DeletedSize, nil
 }
 
 func (l *log) findDeleteReader(offsets map[int64]struct{}) (*reader, error) {

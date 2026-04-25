@@ -56,9 +56,10 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(dmsgs)
 		require.NoError(t, err)
 
-		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
-		require.Len(t, off, 1)
+		require.Len(t, deletedMsgs, 1)
 		require.Contains(t, off, int64(0))
 		require.Equal(t, l.Size(msgs[0]), cmp)
 
@@ -80,9 +81,10 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(dmsgs)
 		require.NoError(t, err)
 
-		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
-		require.Len(t, off, 1)
+		require.Len(t, deletedMsgs, 1)
 		require.Contains(t, off, int64(4))
 		require.Equal(t, l.Size(msgs[0]), cmp)
 
@@ -102,9 +104,10 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
-		require.Len(t, off, len(msgs))
+		require.Len(t, deletedMsgs, len(msgs))
 		for i := range msgs {
 			require.Contains(t, off, int64(i))
 		}
@@ -130,7 +133,8 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(nmsgs)
 		require.NoError(t, err)
 
-		off, cmp, err := CompactUpdates(context.TODO(), l, nmsgs[2].Time)
+		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, nmsgs[2].Time)
+		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
 		require.Len(t, off, 3)
 		for i := range 3 {
@@ -155,7 +159,8 @@ func TestUpdates(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
 		require.Len(t, off, 1)
 		require.Contains(t, off, int64(1))

@@ -53,7 +53,7 @@ func FindBySize(ctx context.Context, l Log, sz int64) (map[int64]struct{}, error
 // TrimBySize tries to remove messages until log size is less than sz
 //
 // returns the offsets it deleted and the amount of storage freed
-func TrimBySize(ctx context.Context, l Log, sz int64) (map[int64]struct{}, int64, error) {
+func TrimBySize(ctx context.Context, l Log, sz int64) ([]Message, int64, error) {
 	offsets, err := FindBySize(ctx, l, sz)
 	if err != nil {
 		return nil, 0, err
@@ -62,7 +62,7 @@ func TrimBySize(ctx context.Context, l Log, sz int64) (map[int64]struct{}, int64
 }
 
 // TrimBySizeMulti is similar to BySize, but will try to remove messages from multiple segments
-func TrimBySizeMulti(ctx context.Context, l Log, sz int64, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+func TrimBySizeMulti(ctx context.Context, l Log, sz int64, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindBySize(ctx, l, sz)
 	if err != nil {
 		return nil, 0, err

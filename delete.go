@@ -32,31 +32,30 @@ func DeleteMultiWithWait(d time.Duration) DeleteMultiBackoff {
 //
 // [DeleteMultiBackoff] is called on each iteration to give
 // others a chance to work with the log, while being deleted
-func DeleteMulti(ctx context.Context, l Log, offsets map[int64]struct{}, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+func DeleteMulti(ctx context.Context, l Log, offsets map[int64]struct{}, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	var remainingOffsets = maps.Clone(offsets)
-	var deletedOffsets = map[int64]struct{}{}
+	var deletedMessages []Message
 	var deletedSize int64
 
 	for len(remainingOffsets) > 0 {
 		deleted, size, err := l.Delete(remainingOffsets)
 		switch {
 		case err != nil:
-			return deletedOffsets, deletedSize, err
+			return deletedMessages, deletedSize, err
 		case len(deleted) == 0:
-			return deletedOffsets, deletedSize, nil
+			return deletedMessages, deletedSize, nil
 		}
 
-		maps.Copy(deletedOffsets, deleted)
+		deletedMessages = append(deletedMessages, deleted...)
 		deletedSize += size
-		maps.DeleteFunc(remainingOffsets, func(k int64, v struct{}) bool {
-			_, ok := deleted[k]
-			return ok
-		})
+		for _, msg := range deleted {
+			delete(remainingOffsets, msg.Offset)
+		}
 
 		if err := backoff(ctx); err != nil {
-			return deletedOffsets, deletedSize, err
+			return deletedMessages, deletedSize, err
 		}
 	}
 
-	return deletedOffsets, deletedSize, nil
+	return deletedMessages, deletedSize, nil
 }
