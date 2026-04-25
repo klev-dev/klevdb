@@ -72,11 +72,20 @@ func TrimByAge(ctx context.Context, l Log, before time.Time) ([]Message, int64, 
 	return l.Delete(offsets)
 }
 
-// TrimByAgeMulti is similar to ByAge, but will try to remove messages from multiple segments
+// TrimByAgeMulti is similar to [TrimByAge], but will try to remove messages from multiple segments
 func TrimByAgeMulti(ctx context.Context, l Log, before time.Time, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindByAge(ctx, l, before)
 	if err != nil {
 		return nil, 0, err
 	}
 	return DeleteMulti(ctx, l, offsets, backoff)
+}
+
+// TrimByAgeMultiOffsets is similar to [TrimByAgeMulti], but only returns the deleted offsets
+func TrimByAgeMultiOffsets(ctx context.Context, l Log, before time.Time, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindByAge(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return DeleteMultiOffsets(ctx, l, offsets, backoff)
 }

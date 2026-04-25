@@ -19,9 +19,9 @@ func TestDeletes(t *testing.T) {
 		require.NoError(t, err)
 		defer l.Close()
 
-		off, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
 		require.NoError(t, err)
-		require.Empty(t, off)
+		require.Empty(t, deletedMsgs)
 		require.Equal(t, int64(0), cmp)
 	})
 
@@ -33,9 +33,9 @@ func TestDeletes(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		off, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
 		require.NoError(t, err)
-		require.Empty(t, off)
+		require.Empty(t, deletedMsgs)
 		require.Equal(t, int64(0), cmp)
 	})
 
@@ -55,21 +55,12 @@ func TestDeletes(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		msgs, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactDeletes(context.TODO(), l, time.Now())
 		require.NoError(t, err)
-		require.Len(t, msgs, 5)
-		off := getOffsets(msgs)
-		for i := range nmsgs {
-			require.Contains(t, off, int64(i))
+		require.Len(t, deletedMsgs, 5)
+		for _, nmsg := range nmsgs {
+			require.Contains(t, deletedMsgs, nmsg)
 		}
 		require.Equal(t, l.Size(nmsgs[0])*int64(len(nmsgs)), cmp)
 	})
-}
-
-func getOffsets(msgs []Message) map[int64]struct{} {
-	offsets := make(map[int64]struct{}, len(msgs))
-	for _, msg := range msgs {
-		offsets[msg.Offset] = struct{}{}
-	}
-	return offsets
 }

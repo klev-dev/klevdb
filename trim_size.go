@@ -61,8 +61,17 @@ func TrimBySize(ctx context.Context, l Log, sz int64) ([]Message, int64, error) 
 	return l.Delete(offsets)
 }
 
-// TrimBySizeMulti is similar to BySize, but will try to remove messages from multiple segments
+// TrimBySizeMulti is similar to [TrimBySize], but will try to remove messages from multiple segments
 func TrimBySizeMulti(ctx context.Context, l Log, sz int64, backoff DeleteMultiBackoff) ([]Message, int64, error) {
+	offsets, err := FindBySize(ctx, l, sz)
+	if err != nil {
+		return nil, 0, err
+	}
+	return DeleteMulti(ctx, l, offsets, backoff)
+}
+
+// TrimBySizeMultiOffsets is similar to [TrimBySizeMulti], but only returns the deleted offsets
+func TrimBySizeMultiOffsets(ctx context.Context, l Log, sz int64, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindBySize(ctx, l, sz)
 	if err != nil {
 		return nil, 0, err

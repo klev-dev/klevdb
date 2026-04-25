@@ -51,7 +51,7 @@ SEARCH:
 	return offsets, nil
 }
 
-// Updates tries to remove messages before given time that are repeated
+// CompactUpdates tries to remove messages before given time that are repeated
 // further in the log leaving only the last message for a given key.
 //
 // This is similar to removing the old value updates,
@@ -66,11 +66,20 @@ func CompactUpdates(ctx context.Context, l Log, before time.Time) ([]Message, in
 	return l.Delete(offsets)
 }
 
-// UpdatesMulti is similar to Updates, but will try to remove messages from multiple segments
+// CompactUpdatesMulti is similar to [CompactUpdates], but will try to remove messages from multiple segments
 func CompactUpdatesMulti(ctx context.Context, l Log, before time.Time, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindUpdates(ctx, l, before)
 	if err != nil {
 		return nil, 0, err
 	}
 	return DeleteMulti(ctx, l, offsets, backoff)
+}
+
+// CompactUpdatesMultiOffsets is similar to [CompactUpdatesMulti], but only returns the deleted offsets
+func CompactUpdatesMultiOffsets(ctx context.Context, l Log, before time.Time, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindUpdates(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return DeleteMultiOffsets(ctx, l, offsets, backoff)
 }

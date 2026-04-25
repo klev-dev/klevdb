@@ -75,11 +75,20 @@ func CompactDeletes(ctx context.Context, l Log, before time.Time) ([]Message, in
 	return l.Delete(offsets)
 }
 
-// CompactDeletesMulti is similar to Deletes, but will try to remove messages from multiple segments
+// CompactDeletesMulti is similar to [CompactDeletes], but will try to remove messages from multiple segments
 func CompactDeletesMulti(ctx context.Context, l Log, before time.Time, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindDeletes(ctx, l, before)
 	if err != nil {
 		return nil, 0, err
 	}
 	return DeleteMulti(ctx, l, offsets, backoff)
+}
+
+// CompactDeletesMultiOffsets is similar to [CompactDeletesMulti], but only returns the deleted offsets
+func CompactDeletesMultiOffsets(ctx context.Context, l Log, before time.Time, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindDeletes(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return DeleteMultiOffsets(ctx, l, offsets, backoff)
 }

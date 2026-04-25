@@ -33,9 +33,9 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		off, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
+		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
 		require.NoError(t, err)
-		require.Empty(t, off)
+		require.Empty(t, deletedMsgs)
 		require.Equal(t, int64(0), cmp)
 
 		gmsg, err := l.GetByKey(msgs[0].Key)
@@ -57,10 +57,9 @@ func TestUpdates(t *testing.T) {
 		require.NoError(t, err)
 
 		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
-		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
 		require.Len(t, deletedMsgs, 1)
-		require.Contains(t, off, int64(0))
+		require.Contains(t, deletedMsgs, msgs[0])
 		require.Equal(t, l.Size(msgs[0]), cmp)
 
 		gmsg, err := l.GetByKey(msgs[0].Key)
@@ -82,10 +81,9 @@ func TestUpdates(t *testing.T) {
 		require.NoError(t, err)
 
 		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
-		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
 		require.Len(t, deletedMsgs, 1)
-		require.Contains(t, off, int64(4))
+		require.Contains(t, deletedMsgs, msgs[4])
 		require.Equal(t, l.Size(msgs[0]), cmp)
 
 		gmsg, err := l.GetByKey(msgs[4].Key)
@@ -101,21 +99,21 @@ func TestUpdates(t *testing.T) {
 		_, err = l.Publish(msgs)
 		require.NoError(t, err)
 
-		_, err = l.Publish(msgs)
+		upmsgs := slices.Clone(msgs)
+		_, err = l.Publish(upmsgs)
 		require.NoError(t, err)
 
 		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
-		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
 		require.Len(t, deletedMsgs, len(msgs))
-		for i := range msgs {
-			require.Contains(t, off, int64(i))
+		for _, msg := range msgs {
+			require.Contains(t, deletedMsgs, msg)
 		}
 		require.Equal(t, l.Size(msgs[0])*int64(len(msgs)), cmp)
 
 		gmsg, err := l.GetByKey(msgs[1].Key)
 		require.NoError(t, err)
-		require.Equal(t, msgs[1], gmsg)
+		require.Equal(t, upmsgs[1], gmsg)
 	})
 
 	t.Run("Time", func(t *testing.T) {
@@ -134,11 +132,10 @@ func TestUpdates(t *testing.T) {
 		require.NoError(t, err)
 
 		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, nmsgs[2].Time)
-		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
-		require.Len(t, off, 3)
+		require.Len(t, deletedMsgs, 3)
 		for i := range 3 {
-			require.Contains(t, off, int64(i))
+			require.Contains(t, deletedMsgs, msgs[i])
 		}
 		require.Equal(t, l.Size(msgs[0])*3, cmp)
 
@@ -152,18 +149,16 @@ func TestUpdates(t *testing.T) {
 		require.NoError(t, err)
 		defer l.Close()
 
-		_, err = l.Publish([]Message{
-			{Key: []byte("x")},
-			{},
-			{},
-		})
+		nmsgs := message.Gen(3)
+		nmsgs[1].Key = nil
+		nmsgs[2].Key = nil
+		_, err = l.Publish(nmsgs)
 		require.NoError(t, err)
 
 		deletedMsgs, cmp, err := CompactUpdates(context.TODO(), l, time.Now())
-		off := getOffsets(deletedMsgs)
 		require.NoError(t, err)
-		require.Len(t, off, 1)
-		require.Contains(t, off, int64(1))
-		require.Equal(t, l.Size(Message{}), cmp)
+		require.Len(t, deletedMsgs, 1)
+		require.Contains(t, deletedMsgs, nmsgs[1])
+		require.Equal(t, l.Size(nmsgs[1]), cmp)
 	})
 }

@@ -75,9 +75,10 @@ func testByAgeAll(t *testing.T) {
 	require.NoError(t, err)
 
 	trimTime := msgs[len(msgs)-1].Time.Add(time.Millisecond)
-	off, sz, err := TrimByAge(context.TODO(), l, trimTime)
+	deletedMsgs, sz, err := TrimByAge(context.TODO(), l, trimTime)
 	require.NoError(t, err)
-	require.Len(t, off, 20)
+	require.Len(t, deletedMsgs, 20)
+	require.Equal(t, msgs, deletedMsgs)
 	require.Equal(t, l.Size(msgs[0])*20, sz)
 
 	coff, cmsgs, err := l.Consume(OffsetOldest, 32)

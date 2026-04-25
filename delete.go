@@ -59,3 +59,32 @@ func DeleteMulti(ctx context.Context, l Log, offsets map[int64]struct{}, backoff
 
 	return deletedMessages, deletedSize, nil
 }
+
+// DeleteMultiOffsets is similar to [DeleteMulti] but will only collect offsets instead of whole messages
+func DeleteMultiOffsets(ctx context.Context, l Log, offsets map[int64]struct{}, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	var remainingOffsets = maps.Clone(offsets)
+	var deletedOffsets = map[int64]struct{}{}
+	var deletedSize int64
+
+	for len(remainingOffsets) > 0 {
+		deleted, size, err := l.Delete(remainingOffsets)
+		switch {
+		case err != nil:
+			return deletedOffsets, deletedSize, err
+		case len(deleted) == 0:
+			return deletedOffsets, deletedSize, nil
+		}
+
+		deletedSize += size
+		for _, msg := range deleted {
+			deletedOffsets[msg.Offset] = struct{}{}
+			delete(remainingOffsets, msg.Offset)
+		}
+
+		if err := backoff(ctx); err != nil {
+			return deletedOffsets, deletedSize, err
+		}
+	}
+
+	return deletedOffsets, deletedSize, nil
+}

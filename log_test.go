@@ -1158,10 +1158,9 @@ func testDeleteReaderPartial(t *testing.T) {
 	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		0: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, deletedMsgs, 1)
-	require.Contains(t, offsets, int64(0))
+	require.Contains(t, deletedMsgs, msgs[0])
 	require.Equal(t, l.Size(msgs[0]), sz)
 
 	stats, err = l.Stat()
@@ -1212,10 +1211,9 @@ func testDeleteReaderPartialReload(t *testing.T) {
 	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		0: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 1)
-	require.Contains(t, offsets, int64(0))
+	require.Len(t, deletedMsgs, 1)
+	require.Contains(t, deletedMsgs, msgs[0])
 	require.Equal(t, l.Size(msgs[0]), sz)
 
 	stats, err = l.Stat()
@@ -1257,11 +1255,10 @@ func testDeleteReaderFull(t *testing.T) {
 		0: {},
 		1: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, deletedMsgs, 2)
-	require.Contains(t, offsets, int64(0))
-	require.Contains(t, offsets, int64(1))
+	require.Contains(t, deletedMsgs, msgs[0])
+	require.Contains(t, deletedMsgs, msgs[1])
 	require.Equal(t, l.Size(msgs[0])*2, sz)
 
 	stats, err = l.Stat()
@@ -1297,11 +1294,10 @@ func testDeleteWriterSingle(t *testing.T) {
 		0: {},
 		1: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, deletedMsgs, 2)
-	require.Contains(t, offsets, int64(0))
-	require.Contains(t, offsets, int64(1))
+	require.Contains(t, deletedMsgs, msgs[0])
+	require.Contains(t, deletedMsgs, msgs[1])
 	require.Equal(t, l.Size(msgs[0])*2, sz)
 
 	stats, err = l.Stat()
@@ -1339,10 +1335,9 @@ func testDeleteWriterLast(t *testing.T) {
 	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		3: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
-	require.Len(t, offsets, 1)
-	require.Contains(t, offsets, int64(3))
+	require.Len(t, deletedMsgs, 1)
+	require.Contains(t, deletedMsgs, msgs[3])
 	require.Equal(t, l.Size(msgs[0]), sz)
 
 	stats, err := l.Stat()
@@ -1386,10 +1381,9 @@ func testDeleteWriterPartial(t *testing.T) {
 	deletedMsgs, sz, err := l.Delete(map[int64]struct{}{
 		2: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, deletedMsgs, 1)
-	require.Contains(t, offsets, int64(2))
+	require.Contains(t, deletedMsgs, msgs[2])
 	require.Equal(t, l.Size(msgs[0]), sz)
 
 	stats, err = l.Stat()
@@ -1433,11 +1427,10 @@ func testDeleteWriterFull(t *testing.T) {
 		2: {},
 		3: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, deletedMsgs, 2)
-	require.Contains(t, offsets, int64(2))
-	require.Contains(t, offsets, int64(3))
+	require.Contains(t, deletedMsgs, msgs[2])
+	require.Contains(t, deletedMsgs, msgs[3])
 	require.Equal(t, l.Size(msgs[0])*2, sz)
 
 	stats, err = l.Stat()
@@ -1483,11 +1476,10 @@ func testDeleteAll(t *testing.T) {
 		2: {},
 		3: {},
 	})
-	offsets := getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, deletedMsgs, 2)
-	require.Contains(t, offsets, int64(2))
-	require.Contains(t, offsets, int64(3))
+	require.Contains(t, deletedMsgs, msgs[2])
+	require.Contains(t, deletedMsgs, msgs[3])
 	require.Equal(t, l.Size(msgs[0])*2, sz)
 
 	// delete the reader segment
@@ -1495,11 +1487,10 @@ func testDeleteAll(t *testing.T) {
 		0: {},
 		1: {},
 	})
-	offsets = getOffsets(deletedMsgs)
 	require.NoError(t, err)
 	require.Len(t, deletedMsgs, 2)
-	require.Contains(t, offsets, int64(0))
-	require.Contains(t, offsets, int64(1))
+	require.Contains(t, deletedMsgs, msgs[0])
+	require.Contains(t, deletedMsgs, msgs[1])
 	require.Equal(t, l.Size(msgs[0])*2, sz)
 
 	stats, err := l.Stat()

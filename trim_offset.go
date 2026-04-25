@@ -61,11 +61,20 @@ func TrimByOffset(ctx context.Context, l Log, before int64) ([]Message, int64, e
 	return l.Delete(offsets)
 }
 
-// TrimByOffsetMulti is similar to ByOffset, but will try to remove messages from multiple segments
+// TrimByOffsetMulti is similar to [TrimByOffset], but will try to remove messages from multiple segments
 func TrimByOffsetMulti(ctx context.Context, l Log, before int64, backoff DeleteMultiBackoff) ([]Message, int64, error) {
 	offsets, err := FindByOffset(ctx, l, before)
 	if err != nil {
 		return nil, 0, err
 	}
 	return DeleteMulti(ctx, l, offsets, backoff)
+}
+
+// TrimByOffsetMultiOffsets is similar to [TrimByOffsetMulti], but only returns the deleted offsets
+func TrimByOffsetMultiOffsets(ctx context.Context, l Log, before int64, backoff DeleteMultiBackoff) (map[int64]struct{}, int64, error) {
+	offsets, err := FindByOffset(ctx, l, before)
+	if err != nil {
+		return nil, 0, err
+	}
+	return DeleteMultiOffsets(ctx, l, offsets, backoff)
 }
