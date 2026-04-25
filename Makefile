@@ -14,7 +14,7 @@ lint:
 build:
 	go build -v ./...
 
-.PHONY: bench bench-publish bench-consume bench-get bench-multi
+.PHONY: bench bench-publish bench-consume bench-get bench-multi bench-keys
 bench:
 	go test -bench=. -benchmem -run XXX
 
@@ -29,6 +29,10 @@ bench-get:
 
 bench-multi:
 	go test -bench=BenchmarkMulti/V2 -benchmem -run XXX
+
+bench-keys:
+	go test -bench=//V2//Keys -benchmem -run XXX
+	go test -bench=//V2/Key -benchmem -run XXX
 
 .PHONY: update-libs
 update-libs:
