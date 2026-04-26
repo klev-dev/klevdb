@@ -6,8 +6,7 @@ import (
 	"time"
 )
 
-// FindByAge returns a set of offsets for messages that are
-// at the start of the log and before given time.
+// FindByAge returns a set of offsets for messages that are at the start of the log and before given time.
 func FindByAge(ctx context.Context, l Log, before time.Time) (map[int64]struct{}, error) {
 	maxOffset, _, err := l.OffsetByTime(before)
 	switch {
@@ -63,7 +62,7 @@ SEARCH:
 
 // TrimByAge tries to remove the messages at the start of the log before given time.
 //
-// returns the offsets it deleted and the amount of storage freed
+// returns the messages it deleted and the amount of storage freed
 func TrimByAge(ctx context.Context, l Log, before time.Time) ([]Message, int64, error) {
 	offsets, err := FindByAge(ctx, l, before)
 	if err != nil {

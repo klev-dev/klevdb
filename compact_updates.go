@@ -7,8 +7,7 @@ import (
 	art "github.com/plar/go-adaptive-radix-tree/v2"
 )
 
-// FindUpdates returns a set of offsets for messages that have
-// the same key further in the log, before a given time.
+// FindUpdates returns a set of offsets for messages that have the same key further in the log, before a given time.
 //
 // Messages before the last one for a given key are considered updates
 // that are no longer relevant, and therefore are eligible for deletion.
@@ -54,10 +53,9 @@ SEARCH:
 // CompactUpdates tries to remove messages before given time that are repeated
 // further in the log leaving only the last message for a given key.
 //
-// This is similar to removing the old value updates,
-// leaving only the current value (last update) for a key.
+// This is similar to removing the old value updates, leaving only the current value (last update) for a key.
 //
-// returns the offsets it deleted and the amount of storage freed
+// returns the messages it deleted and the amount of storage freed
 func CompactUpdates(ctx context.Context, l Log, before time.Time) ([]Message, int64, error) {
 	offsets, err := FindUpdates(ctx, l, before)
 	if err != nil {

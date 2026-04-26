@@ -6,8 +6,7 @@ import (
 	"github.com/klev-dev/klevdb/pkg/message"
 )
 
-// FindByOffset returns a set of offsets for messages whose
-// offset is before a given offset
+// FindByOffset returns a set of offsets for messages whose offset is before a given offset
 func FindByOffset(ctx context.Context, l Log, before int64) (map[int64]struct{}, error) {
 	if before == message.OffsetOldest {
 		return map[int64]struct{}{}, nil
@@ -52,7 +51,7 @@ func FindByOffset(ctx context.Context, l Log, before int64) (map[int64]struct{},
 
 // TrimByOffset tries to remove the messages at the start of the log before offset
 //
-// returns the offsets it deleted and the amount of storage freed
+// returns the messages it deleted and the amount of storage freed
 func TrimByOffset(ctx context.Context, l Log, before int64) ([]Message, int64, error) {
 	offsets, err := FindByOffset(ctx, l, before)
 	if err != nil {

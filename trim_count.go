@@ -4,8 +4,7 @@ import (
 	"context"
 )
 
-// FindByCount returns a set of offsets for messages that when
-// removed will keep the number of messages in the log under max
+// FindByCount returns a set of offsets for messages that when removed will keep the number of messages in the log under max
 func FindByCount(ctx context.Context, l Log, max int) (map[int64]struct{}, error) {
 	stats, err := l.Stat()
 	switch {
@@ -51,10 +50,9 @@ func FindByCount(ctx context.Context, l Log, max int) (map[int64]struct{}, error
 	return offsets, nil
 }
 
-// TrimByCount tries to remove messages to keep the number of messages
-// in the log under max count.
+// TrimByCount tries to remove messages to keep the number of messages in the log under max count.
 //
-// returns the offsets it deleted and the amount of storage freed
+// returns the messages it deleted and the amount of storage freed
 func TrimByCount(ctx context.Context, l Log, max int) ([]Message, int64, error) {
 	offsets, err := FindByCount(ctx, l, max)
 	if err != nil {

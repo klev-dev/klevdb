@@ -52,7 +52,7 @@ func FindBySize(ctx context.Context, l Log, sz int64) (map[int64]struct{}, error
 
 // TrimBySize tries to remove messages until log size is less than sz
 //
-// returns the offsets it deleted and the amount of storage freed
+// returns the messages it deleted and the amount of storage freed
 func TrimBySize(ctx context.Context, l Log, sz int64) ([]Message, int64, error) {
 	offsets, err := FindBySize(ctx, l, sz)
 	if err != nil {

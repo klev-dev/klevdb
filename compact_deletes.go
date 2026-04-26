@@ -7,11 +7,9 @@ import (
 	art "github.com/plar/go-adaptive-radix-tree/v2"
 )
 
-// FindDeletes returns a set of offsets for messages with
-// nil value for a given key, before a given time.
+// FindDeletes returns a set of offsets for messages with nil value for a given key, before a given time.
 //
-// Messages that have a nil value are considered deletes
-// for this key, and therefore eligible for deletion.
+// Messages that have a nil value are considered deletes for this key, and therefore eligible for deletion.
 func FindDeletes(ctx context.Context, l Log, before time.Time) (map[int64]struct{}, error) {
 	maxOffset, err := l.NextOffset()
 	if err != nil {
@@ -66,7 +64,7 @@ SEARCH:
 // This is similar to removing keys, which were deleted (e.g. value set to nil)
 // and are therefore no longer relevant/active.
 //
-// returns the offsets it deleted and the amount of storage freed
+// returns the messages it deleted and the amount of storage freed
 func CompactDeletes(ctx context.Context, l Log, before time.Time) ([]Message, int64, error) {
 	offsets, err := FindDeletes(ctx, l, before)
 	if err != nil {
